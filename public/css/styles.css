@@ -1,0 +1,55 @@
+:root {
+    --primary: #4f46e5;
+    --dark-sidebar: #0f172a;
+    --sidebar-width: 270px;
+    --ticket-width: 320px;
+}
+
+body {
+    background-color: #f1f5f9;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden; margin: 0;
+}
+
+/* SIDEBAR */
+.sidebar-desktop {
+    width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0;
+    background-color: var(--dark-sidebar); color: #94a3b8; display: flex; flex-direction: column; z-index: 1000;
+}
+.brand { padding: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.menu-label { padding: 15px 25px 5px; font-size: 0.7rem; letter-spacing: 1px; opacity: 0.6; }
+.nav-item { padding: 12px 25px; cursor: pointer; transition: 0.2s; display: flex; gap: 12px; align-items: center; font-size: 0.9rem; }
+.nav-item:hover, .nav-item.active { color: white; background: rgba(255,255,255,0.08); border-left: 4px solid var(--primary); }
+
+/* CENTRAL */
+.main-content {
+    margin-left: var(--sidebar-width); margin-right: var(--ticket-width);
+    height: 100vh; overflow-y: auto; display: flex; flex-direction: column;
+}
+.view-section { display: none; height: 100%; animation: fadeIn 0.2s; }
+.view-section.active-view { display: block; }
+
+/* LOGISTICA KANBAN */
+.card-logistica {
+    background: white; border-radius: 8px; padding: 10px; margin-bottom: 10px; border-left: 4px solid #ccc;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05); cursor: grab;
+}
+.card-logistica.listo { border-left-color: #6c757d; }
+.card-logistica.ruta { border-left-color: #ffc107; }
+.card-logistica.entregado { border-left-color: #198754; opacity: 0.8; }
+
+/* MAPA */
+#mapContainer { height: 100%; width: 100%; background: #e5e7eb; }
+
+/* TICKET */
+.ticket-panel { width: var(--ticket-width); height: 100vh; position: fixed; right: 0; top: 0; z-index: 1000; }
+
+/* UTILS */
+.cat-pill { padding: 5px 15px; background: white; border: 1px solid #cbd5e1; border-radius: 20px; cursor: pointer; white-space: nowrap; font-size: 0.85rem; }
+.cat-pill:hover, .cat-pill.active { background: var(--primary); color: white; border-color: var(--primary); }
+.card-product { background: white; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #e2e8f0; cursor: pointer; transition: transform 0.2s; height: 100%; }
+.card-product:hover { transform: translateY(-3px); border-color: var(--primary); }
+.prod-icon { font-size: 1.8rem; color: var(--primary); margin-bottom: 5px; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 992px) { .sidebar-desktop, .ticket-panel { display: none !important; } .main-content { margin: 0; } }

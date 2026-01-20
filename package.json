@@ -1,0 +1,60 @@
+{
+  "name": "lavanderia-pos",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/L-A-L-U/lavanderia-pos.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/L-A-L-U/lavanderia-pos/issues"
+  },
+  "homepage": "https://github.com/L-A-L-U/lavanderia-pos#readme",
+  "dependencies": {
+    "@serialport/parser-readline": "^13.0.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.13.2",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "es-define-property": "^1.0.1",
+    "escpos": "^3.0.0-alpha.6",
+    "escpos-network": "^3.0.0-alpha.5",
+    "escpos-usb": "^3.0.0-alpha.4",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-handlebars": "^8.0.4",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "^1.18.2",
+    "facturapi": "^4.10.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^8.5.1",
+    "mercadopago": "^2.11.0",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
+    "node-escpos": "^0.0.3",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.16.3",
+    "pg-hstore": "^2.3.4",
+    "puppeteer": "^24.33.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "sequelize": "^6.37.7",
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

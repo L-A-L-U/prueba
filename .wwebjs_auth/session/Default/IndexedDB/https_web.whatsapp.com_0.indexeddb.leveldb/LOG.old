@@ -1,0 +1,62 @@
+2026/01/03-09:54:50.137 b203 Reusing MANIFEST /Users/lalu/Desktop/lavanderiav2/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-012208
+2026/01/03-09:54:50.138 b203 Recovering log #13792
+2026/01/03-09:54:50.182 b203 Reusing old log /Users/lalu/Desktop/lavanderiav2/.wwebjs_auth/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/013792.log 
+2026/01/03-09:54:52.029 b203 Level-0 table #13821: started
+2026/01/03-09:54:52.044 b203 Level-0 table #13821: 923396 bytes OK
+2026/01/03-09:54:52.055 b203 Delete type=0 #13792
+2026/01/03-09:54:52.056 b203 Manual compaction at level-0 from '\x00y\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00z\x00\x00\x00' @ 0 : 0; will stop at '\x00y\x00\x00\x05' @ 20768465 : 1
+2026/01/03-09:54:52.056 b203 Compacting 1@0 + 1@1 files
+2026/01/03-09:54:52.074 b203 Generated table #13822@0: 13739 keys, 396748 bytes
+2026/01/03-09:54:52.076 b203 Generated table #13823@0: 70 keys, 11735 bytes
+2026/01/03-09:54:52.080 b203 Generated table #13824@0: 13 keys, 1151 bytes
+2026/01/03-09:54:52.080 b203 Compacted 1@0 + 1@1 files => 409634 bytes
+2026/01/03-09:54:52.084 b203 compacted to: files[ 0 3 30 28 0 0 0 ]
+2026/01/03-09:54:52.085 b203 Delete type=2 #13821
+2026/01/03-09:54:52.085 b203 Manual compaction at level-0 from '\x00y\x00\x00\x05' @ 20768465 : 1 .. '\x00z\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/01/03-09:54:52.138 b203 Compacting 1@1 + 6@2 files
+2026/01/03-09:54:52.181 b203 Generated table #13825@1: 18306 keys, 2300779 bytes
+2026/01/03-09:54:52.197 b203 Generated table #13826@1: 3858 keys, 2121422 bytes
+2026/01/03-09:54:52.212 b203 Generated table #13827@1: 2272 keys, 2117726 bytes
+2026/01/03-09:54:52.228 b203 Generated table #13828@1: 2556 keys, 2123497 bytes
+2026/01/03-09:54:52.261 b203 Generated table #13829@1: 22783 keys, 2154476 bytes
+2026/01/03-09:54:52.294 b203 Generated table #13830@1: 15730 keys, 2158250 bytes
+2026/01/03-09:54:52.296 b203 Generated table #13831@1: 9 keys, 10464 bytes
+2026/01/03-09:54:52.296 b203 Compacted 1@1 + 6@2 files => 12986614 bytes
+2026/01/03-09:54:52.301 b203 compacted to: files[ 0 2 31 28 0 0 0 ]
+2026/01/03-09:54:52.301 b203 Delete type=2 #13796
+2026/01/03-09:54:52.302 16c03 Compacting 1@1 + 12@2 files
+2026/01/03-09:54:52.312 16c03 Generated table #13832@1: 9646 keys, 115006 bytes
+2026/01/03-09:54:52.316 16c03 Generated table #13833@1: 53 keys, 12002 bytes
+2026/01/03-09:54:52.332 16c03 Generated table #13834@1: 3423 keys, 2148512 bytes
+2026/01/03-09:54:52.349 16c03 Generated table #13835@1: 3406 keys, 2141030 bytes
+2026/01/03-09:54:52.382 16c03 Generated table #13836@1: 27030 keys, 2192110 bytes
+2026/01/03-09:54:52.424 16c03 Generated table #13837@1: 29875 keys, 2263112 bytes
+2026/01/03-09:54:52.486 16c03 Generated table #13838@1: 28613 keys, 2270120 bytes
+2026/01/03-09:54:52.553 16c03 Generated table #13839@1: 25008 keys, 2276235 bytes
+2026/01/03-09:54:52.596 16c03 Generated table #13840@1: 31043 keys, 2260179 bytes
+2026/01/03-09:54:52.634 16c03 Generated table #13841@1: 27913 keys, 2261222 bytes
+2026/01/03-09:54:52.683 16c03 Generated table #13842@1: 30635 keys, 2230325 bytes
+2026/01/03-09:54:52.718 16c03 Generated table #13843@1: 30094 keys, 2207181 bytes
+2026/01/03-09:54:52.728 16c03 Generated table #13844@1: 3537 keys, 401627 bytes
+2026/01/03-09:54:52.728 16c03 Compacted 1@1 + 12@2 files => 22778661 bytes
+2026/01/03-09:54:52.733 16c03 compacted to: files[ 0 1 32 28 0 0 0 ]
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13803
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13817
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13816
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13802
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13800
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13801
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13804
+2026/01/03-09:54:52.733 16c03 Delete type=2 #13727
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13726
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13724
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13725
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13682
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13683
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13681
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13680
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13822
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13823
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13799
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13798
+2026/01/03-09:54:52.734 16c03 Delete type=2 #13818
