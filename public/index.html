@@ -106,7 +106,13 @@
         
         <div style="flex:1; overflow-y:auto; padding-right: 5px;">
             <div id="nav-pos" class="nav-item active" onclick="window.nav('pos')"><i class="bi bi-basket2-fill"></i><span>Vender</span></div>
+            <div id="nav-search" class="nav-item" onclick="window.nav('search')">
+                <i class="bi bi-search"></i><span>Búsqueda</span>
+            </div>
             <div id="nav-rep360" class="nav-item admin-only" onclick="window.nav('rep360')"><i class="bi bi-pie-chart-fill"></i><span>Reporte</span></div>
+            <div id="nav-gastos" class="nav-item admin-only" onclick="window.nav('gastos')">
+                <i class="bi bi-wallet2"></i><span>Gastos</span>
+            </div>
             <div id="nav-kanban" class="nav-item" onclick="window.nav('kanban')"><i class="bi bi-kanban"></i><span>Procesos</span></div>
             <div id="nav-clientes" class="nav-item" onclick="window.nav('clientes')"><i class="bi bi-people"></i><span>Clientes</span></div>
             <div id="nav-chofer" class="nav-item text-warning" onclick="window.nav('chofer')"><i class="bi bi-truck-front-fill"></i><span>Reparto</span></div>
@@ -159,6 +165,149 @@
                         </div>
                         <button id="btnPrincipalCobrar" class="btn btn-primary w-100 py-3 fw-bold shadow-sm rounded-3 fs-5" onclick="window.cobrar()">COBRAR</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="v-search" class="view">
+            <div class="row justify-content-center">
+                <div class="col-md-8 col-lg-6">
+                    <h3 class="fw-bold text-center mb-4">🔍 Rastrear Orden</h3>
+                    
+                    <div class="input-group input-group-lg shadow-sm mb-5">
+                        <span class="input-group-text bg-white border-0 ps-3"><i class="bi bi-qr-code-scan"></i></span>
+                        <input type="text" id="inputBusquedaFolio" class="form-control border-0 fw-bold text-center text-uppercase" placeholder="EJ. PB-00123" onkeypress="if(event.key==='Enter') window.buscarOrden()">
+                        <button class="btn btn-primary px-4 fw-bold" onclick="window.buscarOrden()">BUSCAR</button>
+                    </div>
+                </div>
+            </div>
+        
+            <div id="search-result" style="display:none;" class="fade-in">
+                
+                <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+                    <div class="card-body text-center p-4">
+                        <span class="badge bg-light text-dark border mb-2 px-3 py-2 rounded-pill" id="res-folio">Folio</span>
+                        <h2 class="fw-bold mb-1" id="res-cliente">Cliente</h2>
+                        <div class="text-muted small mb-4" id="res-fecha">Fecha</div>
+        
+                        <div class="position-relative m-4">
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="res-bar"></div>
+                            </div>
+                            <div class="d-flex justify-content-between position-absolute top-0 w-100 translate-middle-y">
+                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-basket text-success"></i></span>
+                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-water text-muted" id="icon-lav"></i></span>
+                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-check-lg text-muted" id="icon-lis"></i></span>
+                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-box-seam text-muted" id="icon-ent"></i></span>
+                            </div>
+                            <div class="d-flex justify-content-between mt-2 small fw-bold text-uppercase text-muted">
+                                <span>Recibido</span><span>Lavando</span><span>Listo</span><span>Entregado</span>
+                            </div>
+                        </div>
+                        
+                        <div id="res-status-text" class="alert alert-light fw-bold border mt-3 mb-0">ESTATUS</div>
+                    </div>
+                </div>
+        
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white fw-bold border-0"><i class="bi bi-list-check text-primary"></i> Prendas y Servicios</div>
+                            <ul class="list-group list-group-flush small" id="res-items"></ul>
+                        </div>
+                    </div>
+        
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white fw-bold border-0"><i class="bi bi-cash-coin text-success"></i> Finanzas</div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2"><span>Total Nota:</span><span class="fw-bold" id="res-total">$0.00</span></div>
+                                <div class="d-flex justify-content-between mb-2 text-success"><span>Abonado:</span><span class="fw-bold" id="res-pagado">$0.00</span></div>
+                                <hr>
+                                <div class="d-flex justify-content-between fs-5 fw-bold">
+                                    <span>Saldo:</span>
+                                    <span id="res-saldo" class="text-danger">$0.00</span>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <small class="text-muted fw-bold">HISTORIAL DE PAGOS:</small>
+                                    <div id="res-historial-pagos" class="mt-1"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="card-footer bg-light border-0" id="res-delivery-info" style="display:none;">
+                                <small class="text-muted fw-bold d-block mb-1">DETALLES DE ENTREGA</small>
+                                <div class="d-flex align-items-center gap-2 text-dark">
+                                    <i class="bi bi-truck text-primary"></i>
+                                    <div class="small lh-1">
+                                        <div>Entregado por: <b id="res-entregador">--</b></div>
+                                        <div class="text-muted" id="res-fecha-ent">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="v-gastos" class="view">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="fw-bold"><i class="bi bi-wallet2 text-danger"></i> Control de Gastos</h3>
+                <button class="btn btn-danger fw-bold shadow-sm" onclick="window.nuevoGastoModal()">
+                    <i class="bi bi-plus-lg"></i> REGISTRAR GASTO
+                </button>
+            </div>
+        
+            <div class="card border-0 shadow-sm p-3 mb-3">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="small fw-bold text-muted">Desde</label>
+                        <input type="date" id="gasto-ini" class="form-control" onchange="window.loadGastosView()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="small fw-bold text-muted">Hasta</label>
+                        <input type="date" id="gasto-fin" class="form-control" onchange="window.loadGastosView()">
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-dark" onclick="window.printGastosPDF()">
+                            <i class="bi bi-file-earmark-pdf"></i> Descargar Reporte
+                        </button>
+                    </div>
+                </div>
+        
+                <div class="row mt-4 text-center">
+                    <div class="col-4 border-end">
+                        <small class="text-muted fw-bold">TOTAL GASTADO</small>
+                        <h3 class="fw-bold text-dark m-0" id="gasto-total">$0.00</h3>
+                    </div>
+                    <div class="col-4 border-end">
+                        <small class="text-muted fw-bold">CON FACTURA (Deducible)</small>
+                        <h3 class="fw-bold text-success m-0" id="gasto-factura">$0.00</h3>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted fw-bold">SIN FACTURA</small>
+                        <h3 class="fw-bold text-danger m-0" id="gasto-sin">$0.00</h3>
+                    </div>
+                </div>
+            </div>
+        
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Concepto</th>
+                                <th>Proveedor</th>
+                                <th>Categoría</th>
+                                <th class="text-center">Factura</th>
+                                <th class="text-end">Monto</th>
+                                <th class="text-end">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblGastos"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -234,7 +383,30 @@
             </div>
         </div>
         
-        <div id="v-audit" class="view"><h3 class="fw-bold text-danger">Auditoría</h3><div class="card p-3 shadow-sm"><table class="table table-sm"><tbody id="tblAudit"></tbody></table></div></div>
+        <div id="v-audit" class="view">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="fw-bold text-danger"><i class="bi bi-shield-lock-fill"></i> Auditoría y Seguridad</h3>
+                <button class="btn btn-light shadow-sm rounded-circle" onclick="window.loadAuditoria()">↻</button>
+            </div>
+            
+            <div class="card p-0 shadow-sm border-0 overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" width="15%">Fecha</th>
+                                <th width="20%">Usuario</th>
+                                <th width="10%">Módulo</th>
+                                <th width="20%">Acción</th>
+                                <th width="35%">Detalles</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblAudit"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div id="v-users" class="view"><h3 class="fw-bold">Equipo</h3><button class="btn btn-primary mb-3" onclick="window.modalUser()">+ Nuevo</button><table class="table"><tbody id="tblUsers"></tbody></table></div>
         <div id="v-sucs" class="view"><h3 class="fw-bold">Sucursales</h3><button class="btn btn-primary mb-3" onclick="window.modalSucursal()">+ Nuevo</button><table class="table"><tbody id="tblSucursales"></tbody></table></div>
         
@@ -243,35 +415,83 @@
             <div class="row g-4">
                 <div class="col-md-6">
                     <div class="card border-0 shadow-sm p-4">
-                        <h5 class="fw-bold text-primary mb-3">Ticket</h5>
-                        <div class="mb-3"><label>Encabezado</label><input id="conf-header" class="form-control"></div>
-                        <div class="mb-3"><label>Dirección</label><input id="conf-dir" class="form-control"></div>
-                        <div class="mb-3"><label>Teléfono</label><input id="conf-tel" class="form-control"></div>
-                        <div class="mb-3"><label>Pie</label><input id="conf-footer" class="form-control"></div>
-                        <div class="mb-3"><label>Legal</label><textarea id="conf-legal" class="form-control" rows="2"></textarea></div>
+                        <h5 class="fw-bold text-primary mb-3"><i class="bi bi-receipt"></i> Datos del Ticket</h5>
                         
-                        <h5 class="fw-bold text-primary mt-3">Operación</h5>
-                        <div class="row mb-2">
-                            <div class="col-6"><label>Precio Kilo</label><input type="number" id="conf-precio-kilo" class="form-control"></div>
-                            <div class="col-6"><label>Min Kilos</label><input type="number" id="conf-min-kilos" class="form-control"></div>
+                        <div class="mb-3">
+                            <label class="small fw-bold text-muted">Encabezado (Nombre del Negocio)</label>
+                            <input type="text" id="conf-header" class="form-control" placeholder="Ej. LAVANDERÍA EXPRESS">
                         </div>
-                        <div class="row align-items-center">
-                            <div class="col-6"><label>Fondo Caja</label><input type="number" id="conf-fondo" class="form-control"></div>
-                            <div class="col-6"><label class="text-primary fw-bold">Días Entrega</label><input type="number" id="conf-dias-entrega" class="form-control border-primary" placeholder="Ej. 2"></div>
-                            
-                            <div class="col-12 mt-2"><label class="text-danger fw-bold small">Días Abandono</label><input type="number" id="conf-dias-abandono" class="form-control border-danger" placeholder="30"></div>
-                            
-                            <div class="col-12 pt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="conf-sin-turno"><label>Permitir venta sin turno</label></div></div>
+        
+                        <div class="row g-2 mb-3">
+                            <div class="col-8">
+                                <label class="small fw-bold text-muted">Dirección</label>
+                                <input type="text" id="conf-dir" class="form-control" placeholder="Calle y Número">
+                            </div>
+                            <div class="col-4">
+                                <label class="small fw-bold text-muted">Teléfono</label>
+                                <input type="text" id="conf-tel" class="form-control" placeholder="10 dígitos">
+                            </div>
                         </div>
-                        <button class="btn btn-primary w-100 mt-3" onclick="window.guardarConfigDB()">GUARDAR CAMBIOS</button>
+        
+                        <div class="mb-3">
+                            <label class="small fw-bold text-muted">Pie de Página (Despedida)</label>
+                            <input type="text" id="conf-footer" class="form-control" placeholder="Ej. ¡Gracias por su preferencia!">
+                        </div>
+        
+                        <div class="mb-3">
+                            <label class="small fw-bold text-muted">Texto Legal (Condiciones)</label>
+                            <textarea id="conf-legal" class="form-control" rows="3" placeholder="Ej. No nos hacemos responsables por ropa que despinta..."></textarea>
+                        </div>
                     </div>
                 </div>
+        
                 <div class="col-md-6">
+                    <div class="card border-0 shadow-sm p-4 mb-4">
+                        <h5 class="fw-bold text-primary mb-3"><i class="bi bi-sliders"></i> Operación</h5>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-6 col-md-4">
+                                <label class="small fw-bold">Precio Kilo</label>
+                                <input type="number" id="conf-precio-kilo" class="form-control">
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="small fw-bold">Min Kilos</label>
+                                <input type="number" id="conf-min-kilos" class="form-control">
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="small fw-bold">Fondo Caja</label>
+                                <input type="number" id="conf-fondo" class="form-control">
+                            </div>
+                            <div class="col-6 col-md-6">
+                                <label class="small fw-bold text-primary">Días Entrega</label>
+                                <input type="number" id="conf-dias-entrega" class="form-control border-primary" placeholder="2">
+                            </div>
+                            <div class="col-6 col-md-6">
+                                <label class="small fw-bold text-danger">Días Abandono</label>
+                                <input type="number" id="conf-dias-abandono" class="form-control border-danger" placeholder="30">
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 pt-3 border-top text-end">
+                            <button class="btn btn-primary fw-bold w-100 py-2 shadow-sm" onclick="window.guardarConfigDB()">
+                                <i class="bi bi-save"></i> GUARDAR CAMBIOS
+                            </button>
+                        </div>
+                    </div>
+        
                     <div class="card border-0 shadow-sm p-4 bg-light">
                         <h5 class="fw-bold mb-3">Impresora</h5>
                         <div class="row mb-3">
-                            <div class="col-6"><label>Ancho</label><select id="conf-ancho" class="form-select" onchange="window.saveLocalPrint()"><option value="58mm">58mm</option><option value="80mm">80mm</option></select></div>
-                            <div class="col-6"><label>Fuente</label><input type="range" id="local-font" min="8" max="16" oninput="window.saveLocalPrint()"></div>
+                            <div class="col-6">
+                                <label>Ancho</label>
+                                <select id="conf-ancho" class="form-select" onchange="window.saveLocalPrint()">
+                                    <option value="58mm">58mm</option>
+                                    <option value="80mm">80mm</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label>Fuente</label>
+                                <input type="range" id="local-font" min="8" max="16" class="form-range" oninput="window.saveLocalPrint()">
+                            </div>
                         </div>
                         <button class="btn btn-dark w-100 mb-3" onclick="window.print()">🖨️ PROBAR IMPRESIÓN</button>
                         <hr>
@@ -295,8 +515,11 @@
         </div>
 
         <div class="mb-3">
-            <label class="small fw-bold text-muted">📅 Fecha Promesa de Entrega</label>
-            <input type="date" id="c-fecha-entrega" class="form-control form-control-lg fw-bold text-center bg-light border-primary text-primary">
+            <label class="small fw-bold text-muted">📅 Fecha y Hora de Entrega</label>
+            <div class="d-flex gap-2">
+                <input type="date" id="c-fecha-entrega" class="form-control form-control-lg fw-bold text-center bg-light border-primary text-primary" style="flex:1;">
+                <input type="text" id="c-hora-entrega" class="form-control form-control-lg fw-bold text-center bg-light border-primary text-dark" placeholder="Ej. 3pm - 6pm" style="flex:1;">
+            </div>
         </div>
 
         <div id="secEnvio" style="display:none" class="mb-3 card bg-light p-2 border-0">
@@ -306,12 +529,10 @@
 
         <div class="card bg-light p-3 border-0 rounded-4">
             <label class="small fw-bold text-muted mb-2">MÉTODOS DE PAGO:</label>
-            
             <div class="input-group mb-2">
                 <span class="input-group-text bg-white border-0"><i class="bi bi-cash"></i></span>
                 <input id="p-efectivo" type="number" class="form-control border-0" placeholder="Efectivo $0.00" onkeyup="window.calcPagos()">
             </div>
-            
             <div class="input-group mb-2">
                 <span class="input-group-text bg-white border-0"><i class="bi bi-credit-card"></i></span>
                 <input id="p-tarjeta" type="number" class="form-control border-0" placeholder="Tarjeta $0.00" onkeyup="window.calcPagos()">
@@ -332,11 +553,157 @@
         <span id="lblTotal" style="display:none">0</span>
     </div>
 </template>
-<template id="tplTintoreria"><div class="mb-4 text-center"><h6 class="fw-bold mb-3">1. Color</h6><div class="d-flex justify-content-center gap-3 p-3 bg-light rounded-4 border"><input type="color" id="tin-color-picker" class="form-control form-control-color shadow-sm" value="#3b82f6" style="width:60px;height:60px;border-radius:50%;cursor:pointer;"></div></div><div class="mb-3"><label class="small fw-bold text-muted">2. Marca</label><input id="tin-marca" class="form-control" placeholder="Ej. Zara"></div><div class="mb-3"><label class="small fw-bold text-muted">3. Detalles</label><textarea id="tin-detalles" class="form-control" rows="2" placeholder="Ej. Mancha..."></textarea></div></template>
-<template id="tplArqueo"><div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$500</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="500"></div></div><div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$200</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="200"></div></div><div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$100</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="100"></div></div><div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$50</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="50"></div></div><div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$20</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="20"></div></div><div class="row g-2 align-items-center mb-3"><div class="col-4 text-end fw-bold">Monedas</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="1"></div></div></template>
-<div class="modal fade" id="modalDetalles" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content border-0 shadow-lg rounded-4"><div class="modal-header border-0 bg-light rounded-top-4"><h5 class="modal-title fw-bold" id="det-folio"></h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><ul id="listaDetalles" class="list-group list-group-flush"></ul><div id="btnLiquidarContainer" class="p-3"></div></div><div class="modal-footer border-0 rounded-bottom-4"><button class="btn btn-danger flex-grow-1 fw-bold py-2 rounded-3 me-2" onclick="window.cancelarOrdenDesdeModal()">🗑️ CANCELAR</button><button class="btn btn-dark flex-grow-1 fw-bold py-2 rounded-3" onclick="window.imprimirTicketDesdeModal()">🖨️ TICKET</button></div></div></div></div>
-<div class="modal fade" id="modalLiquidar" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content rounded-4 border-0 shadow-lg"><div class="modal-header border-0"><h5 class="modal-title fw-bold">Liquidar Deuda</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><h1 class="text-primary fw-bold mb-4" id="liqMonto">$0.00</h1><div class="d-grid gap-3"><button class="btn btn-outline-success py-3 fw-bold rounded-3" onclick="window.confirmarLiquidacion('efectivo')">💵 EFECTIVO</button><button class="btn btn-outline-primary py-3 fw-bold rounded-3" onclick="window.confirmarLiquidacion('tarjeta')">💳 TARJETA</button></div></div></div></div></div>
-<div class="modal fade" id="modalProd" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content border-0 shadow-lg rounded-4"><div class="modal-header border-0"><h5 class="modal-title fw-bold">Producto</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="lblProd" class="h5 text-center mb-3 fw-bold text-primary"></div><div id="secPeso" style="display:none"><label>Peso (Kg)</label><input type="number" id="inpPeso" class="form-control form-control-lg text-center fw-bold" step="0.1"></div><div id="secCantidad"><label>Cantidad</label><input type="number" id="inpCantidadModal" class="form-control form-control-lg text-center fw-bold" value="1"></div><button class="btn btn-primary w-100 py-3 mt-3 fw-bold rounded-3" onclick="window.addCart()">AGREGAR</button></div></div></div></div>
+
+<template id="tplTintoreriaMass">
+    <div class="container-fluid p-0">
+        <div class="alert alert-info py-2 small mb-2">
+            <i class="bi bi-info-circle"></i> Las prendas iguales se agruparán en el ticket.
+        </div>
+        
+        <div class="row g-2 align-items-end mb-3 bg-light p-2 rounded border">
+            <div class="col-2">
+                <label class="small fw-bold">Cant.</label>
+                <input id="tm-qty" type="number" class="form-control form-control-sm text-center fw-bold bg-white" value="1" min="1">
+            </div>
+            <div class="col-4">
+                <label class="small fw-bold">Prenda</label>
+                <input id="tm-prenda" class="form-control form-control-sm" placeholder="Ej. Camisa">
+            </div>
+            <div class="col-3">
+                <label class="small fw-bold">Color</label>
+                <input id="tm-color" type="text" class="form-control form-control-sm" placeholder="Azul">
+            </div>
+            <div class="col-3">
+                <label class="small fw-bold">Detalle</label>
+                <div class="input-group input-group-sm">
+                    <input id="tm-detalles" class="form-control" placeholder="...">
+                    <button class="btn btn-primary fw-bold" onclick="window.addMassItem()">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="border rounded overflow-hidden" style="height: 200px; overflow-y: auto;">
+            <table class="table table-sm table-striped mb-0 small align-middle">
+                <thead class="table-dark sticky-top">
+                    <tr><th width="15%" class="text-center">Cant.</th><th>Prenda</th><th>Color</th><th></th></tr>
+                </thead>
+                <tbody id="tm-lista"></tbody>
+            </table>
+        </div>
+        <div class="text-end mt-1 text-muted small">Total Prendas: <span id="tm-count" class="fw-bold text-dark">0</span></div>
+    </div>
+</template>
+
+<template id="tplTintoreria">
+    <div class="text-start">
+        <div class="mb-3">
+            <label class="small fw-bold text-muted">1. ¿Qué prenda es?</label>
+            <input id="tin-prenda" class="form-control fw-bold" placeholder="Ej. Camisa, Vestido de Noche, Saco...">
+        </div>
+        <div class="mb-3">
+            <label class="small fw-bold text-muted">2. Color</label>
+            <div class="d-flex justify-content-center gap-3 p-2 bg-light rounded-3 border">
+                <input type="color" id="tin-color-picker" class="form-control form-control-color shadow-sm w-100" value="#3b82f6" style="cursor:pointer;">
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="small fw-bold text-muted">3. Marca</label>
+            <input id="tin-marca" class="form-control" placeholder="Ej. Zara, Boss...">
+        </div>
+        <div class="mb-3">
+            <label class="small fw-bold text-muted">4. Detalles / Manchas</label>
+            <textarea id="tin-detalles" class="form-control" rows="2" placeholder="Ej. Mancha de vino en la solapa..."></textarea>
+        </div>
+    </div>
+</template>
+
+<template id="tplArqueo">
+    <div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$500</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="500"></div></div>
+    <div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$200</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="200"></div></div>
+    <div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$100</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="100"></div></div>
+    <div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$50</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="50"></div></div>
+    <div class="row g-2 align-items-center mb-1"><div class="col-4 text-end fw-bold">$20</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="20"></div></div>
+    <div class="row g-2 align-items-center mb-3"><div class="col-4 text-end fw-bold">Monedas</div><div class="col-8"><input type="number" class="form-control arqueo-input" data-val="1"></div></div>
+</template>
+
+<div class="modal fade" id="modalDetalles"> <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 bg-light rounded-top-4">
+                <h5 class="modal-title fw-bold" id="det-folio"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <ul id="listaDetalles" class="list-group list-group-flush"></ul>
+                <div id="btnLiquidarContainer" class="p-3"></div>
+            </div>
+            <div class="modal-footer border-0 rounded-bottom-4">
+                <button class="btn btn-danger flex-grow-1 fw-bold py-2 rounded-3 me-2" onclick="window.cancelarOrdenDesdeModal()">🗑️ CANCELAR</button>
+                <button class="btn btn-dark flex-grow-1 fw-bold py-2 rounded-3" onclick="window.imprimirTicketDesdeModal()">🖨️ TICKET</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalLiquidar"> <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold" id="det-folio">--</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body text-center">
+                <small class="text-muted fw-bold text-uppercase">Total a Pagar</small>
+                <h1 id="liqMonto" class="display-4 fw-bold text-dark my-2">$0.00</h1>
+                
+                <div class="bg-light p-3 rounded-3 mb-3 border">
+                    <label class="small fw-bold text-muted mb-1">💵 Paga con:</label>
+                    <input type="number" id="liq-recibido" class="form-control form-control-lg text-center fw-bold" placeholder="$0.00" onkeyup="window.calcCambioLiq()">
+                    
+                    <div class="mt-2">
+                        <small class="text-muted">Cambio:</small>
+                        <div id="liq-cambio" class="h4 fw-bold text-primary">$0.00</div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success py-3 fw-bold shadow-sm" onclick="window.confirmarLiquidacion('efectivo')">
+                        <i class="bi bi-cash-stack"></i> EFECTIVO
+                    </button>
+                    <button class="btn btn-primary py-2 fw-bold shadow-sm" onclick="window.confirmarLiquidacion('tarjeta')">
+                        <i class="bi bi-credit-card-2-front"></i> TARJETA
+                    </button>
+                    <button class="btn btn-secondary py-2 fw-bold" onclick="window.confirmarLiquidacion('transferencia')">
+                        <i class="bi bi-bank"></i> TRANSFERENCIA
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalProd"> <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="lblProd" class="h5 text-center mb-3 fw-bold text-primary"></div>
+                <div id="secPeso" style="display:none">
+                    <label>Peso (Kg)</label>
+                    <input type="number" id="inpPeso" class="form-control form-control-lg text-center fw-bold" step="0.1">
+                </div>
+                <div id="secCantidad">
+                    <label>Cantidad</label>
+                    <input type="number" id="inpCantidadModal" class="form-control form-control-lg text-center fw-bold" value="1">
+                </div>
+                <button class="btn btn-primary w-100 py-3 mt-3 fw-bold rounded-3" onclick="window.addCart()">AGREGAR</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="app.js"></script>
 </body>

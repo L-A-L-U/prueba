@@ -61,6 +61,30 @@ app.get('/', (req, res) => {
     }
 });
 
+// --- HERRAMIENTA DE REPARACIÓN FINAL (COLUMNAS DE APERTURA) ---
+// --- REPARACIÓN DEFINITIVA DE BASE DE DATOS ---
+// --- REPARACIÓN FINAL: QUITAR RESTRICCIÓN DE USUARIO ID ---
+app.get('/desbloquear-usuario-id', async (req, res) => {
+    const pool = require('./src/database/db'); 
+    try {
+        // Esta línea le dice a la DB: "La columna usuario_id ya no es obligatoria, déjala pasar si está vacía"
+        await pool.query("ALTER TABLE turnos ALTER COLUMN usuario_id DROP NOT NULL;");
+
+        res.send(`
+            <h1 style="color:green; font-family:sans-serif;">✅ RESTRICCIÓN ELIMINADA</h1>
+            <p>La columna 'usuario_id' ahora permite valores nulos.</p>
+            <p>El sistema nuevo ya puede guardar en 'usuario_id_apertura' sin problemas.</p>
+            <a href="/" style="font-size:20px;">INTENTAR ABRIR/CERRAR TURNO AHORA</a>
+        `);
+    } catch (e) { 
+        // Si el error dice que la columna no existe, es bueno, significa que ya no molesta.
+        if(e.message.includes('undefined column')) {
+             res.send('<h1 style="color:blue">Todo bien: La columna problemática ni siquiera existe.</h1><a href="/">Volver</a>');
+        } else {
+             res.send(`<h1 style="color:red">Error: ${e.message}</h1>`); 
+        }
+    }
+});
 // --- 4. ENCENDER SERVIDOR ---
 const PORT = process.env.PORT || 3000;
 

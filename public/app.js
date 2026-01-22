@@ -3,6 +3,12 @@
    ========================================= */
    let usuario = null;
 
+    const Swal = window.Swal.mixin({
+        showCloseButton: true,  // <--- ¡ESTA ES LA CLAVE! Pone la X en la esquina
+        allowEscapeKey: true,   // Permite cerrar con la tecla ESC
+        allowOutsideClick: true // Permite cerrar clicando fuera (opcional)
+    });
+
    // --- BLOQUE DE SEGURIDAD ---
    try {
        const storedUser = localStorage.getItem('usuario');
@@ -18,10 +24,24 @@
        usuario = null;
    }
    
-   // Priorizar la sucursal seleccionada manualmente
-   let sucursalID = localStorage.getItem('sucursal_activa') 
-       ? parseInt(localStorage.getItem('sucursal_activa')) 
-       : (usuario ? (usuario.sucursal_id || 1) : 1);
+   // --- CANDADO DE SEGURIDAD DE SUCURSAL ---
+   let sucursalID = 1; // Valor por defecto
+
+   if (usuario) {
+       // Si NO es admin, lo obligamos a usar SU sucursal asignada.
+       if (usuario.rol !== 'admin') {
+           sucursalID = usuario.sucursal_id || 1;
+           // Forzamos la variable local para que no haya errores
+           localStorage.setItem('sucursal_activa', sucursalID);
+       } 
+       // Si ES admin, le permitimos usar la que eligió manualmente o la suya por defecto
+       else {
+           sucursalID = localStorage.getItem('sucursal_activa') 
+               ? parseInt(localStorage.getItem('sucursal_activa')) 
+               : (usuario.sucursal_id || 1);
+       }
+   }
+   // ----------------------------------------
    
    let carrito = [], itemTemp = {};
    let cat = []; 
@@ -99,25 +119,55 @@
    /* =========================================
       2. NAVEGACIÓN Y CARGA
       ========================================= */
-   window.nav = function(view) {
-       document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
-       const viewEl = getEl('v-' + view);
-       if(viewEl) viewEl.classList.add('active');
-       
-       if(window.innerWidth < 900) document.querySelector('.sidebar').classList.remove('show');
-   
-       // Cargas dinámicas
-       if(view === 'pos') { cargarInventarioPOS(); }
-       if(view === 'kanban') window.loadKanban();
-       if(view === 'inv') window.loadInv();
-       if(view === 'hist') window.loadHistorial();
-       if(view === 'sucs') window.loadSucursalesTable();
-       if(view === 'users') window.loadUsers();
-       if(view === 'audit') window.loadAuditoria();
-       if(view === 'clientes') window.loadClientesDir();
-       if(view === 'rep360') window.loadReport360();
-       if(view === 'chofer') window.loadChoferView();
-   };
+   // --- REEMPLAZAR window.nav EN public/app.js ---
+
+    window.nav = function(view) {
+        // 1. Ocultar todas las vistas y mostrar la elegida
+        document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+        const viewEl = document.getElementById('v-' + view);
+        if(viewEl) viewEl.classList.add('active');
+        
+        // 2. Cerrar menú en móvil
+        if(window.innerWidth < 900) {
+            const side = document.querySelector('.sidebar');
+            if(side) side.classList.remove('show');
+        }
+
+        // 3. Cargas dinámicas (El cerebro de cada sección)
+        if(view === 'pos') { cargarInventarioPOS(); }
+        if(view === 'kanban') window.loadKanban();
+        if(view === 'inv') window.loadInv();
+        if(view === 'hist') window.loadHistorial();
+        if(view === 'sucs') window.loadSucursalesTable();
+        if(view === 'users') window.loadUsers();
+        if(view === 'audit') window.loadAuditoria();
+        if(view === 'clientes') window.loadClientesDir();
+        if(view === 'rep360') window.loadReport360();
+        if(view === 'chofer') window.loadChoferView();
+        if(view === 'gastos') window.loadGastosView();
+
+        // DENTRO DE window.nav, al final de los ifs:
+
+        if(view === 'search') {
+            const inp = getEl('inputBusquedaFolio');
+            const res = getEl('search-result');
+            if(res) res.style.display = 'none';
+            if(inp) { inp.value = ''; setTimeout(() => inp.focus(), 300); }
+        }
+
+        // --- AQUÍ ESTÁ LO NUEVO PARA LA BÚSQUEDA ---
+        if(view === 'search') {
+            // Limpiamos la búsqueda anterior para que se vea limpio
+            const inp = document.getElementById('inputBusquedaFolio');
+            const res = document.getElementById('search-result');
+            
+            if(res) res.style.display = 'none'; // Ocultar resultados viejos
+            if(inp) { 
+                inp.value = ''; // Limpiar texto
+                setTimeout(() => inp.focus(), 300); // Poner cursor listo para escribir
+            }
+        }
+    };
    
    window.toggleMenu = function() { document.querySelector('.sidebar').classList.toggle('show'); };
    window.logout = function() { localStorage.clear(); location.href='/login.html'; };
@@ -153,39 +203,124 @@
            </div>`).join('') : '<div class="text-center w-100 p-4 text-muted">Sin resultados</div>'; 
    };
    
-   window.prepararVenta = async function(id) {
-       const p = cat.find(x => x.id === id);
-       if(!p) return;
-   
-       if(p.tipo === 'tintoreria') {
-           const { value: f } = await Swal.fire({
-               title: `Detalles: ${p.nombre}`,
-               html: getEl('tplTintoreria').innerHTML, 
-               focusConfirm: false,
-               preConfirm: () => ({
-                   color: getEl('tin-color-picker').value,
-                   marca: getEl('tin-marca').value,
-                   detalles: getEl('tin-detalles').value
-               })
-           });
-           if(f) {
-               carrito.push({ 
-                   id: p.id, n: p.nombre, p: parseFloat(p.precio), cantidad: 1, tipo: 'tintoreria',
-                   nota: `[${f.marca}] ${f.detalles} (Color: ${f.color})`, detalles: f 
-               });
-               window.saveCart(); window.renderCart();
-           }
-       } else {
-           itemTemp = {...p};
-           getEl('lblProd').innerText = p.nombre;
-           getEl('secPeso').style.display = 'none'; 
-           getEl('secCantidad').style.display = 'block';
-           getEl('inpCantidadModal').value = 1;
-           
-           modalProdBS.show();
-           setTimeout(()=>getEl('inpCantidadModal').focus(), 500);
-       }
-   };
+    // --- PEGAR EN public/app.js (Reemplazando las funciones anteriores de Tintorería) ---
+
+    let massList = []; 
+    let massProductBase = null;
+
+    // --- REEMPLAZAR EN public/app.js ---
+    window.prepararVenta = async function(id) {
+        const p = cat.find(x => x.id === id);
+        if(!p) return;
+
+        if(p.tipo === 'tintoreria') {
+            const { isConfirmed } = await Swal.fire({
+                title: p.nombre, text: "¿Vas a registrar una sola prenda o un lote?", icon: 'question',
+                showCancelButton: true, showCloseButton: true,
+                confirmButtonText: '📦 Lote (Varias)', cancelButtonText: 'Una sola'
+            });
+
+            if (isConfirmed) {
+                massList = []; massProductBase = p;
+                await Swal.fire({
+                    title: `Lote: ${p.nombre}`,
+                    html: getEl('tplTintoreriaMass').innerHTML,
+                    width: '700px',
+                    showCancelButton: true, showCloseButton: true,
+                    confirmButtonText: 'Terminar y Agregar', cancelButtonText: 'Cancelar',
+                    didOpen: () => {
+                        setTimeout(() => { const el = document.getElementById('tm-prenda'); if(el) el.focus(); }, 300);
+                        // --- CORRECCIÓN DE SEGURIDAD ---
+                        ['tm-qty','tm-prenda','tm-color','tm-detalles'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if(el) el.addEventListener('keypress', (e) => { if(e.key==='Enter') window.addMassItem(); });
+                        });
+                    },
+                    preConfirm: () => { if(massList.length === 0) return Swal.showValidationMessage('Vacío'); return true; }
+                });
+
+                if (massList.length > 0) {
+                    massList.forEach(mItem => {
+                        const notaUnica = `${mItem.prenda.toUpperCase()} - ${mItem.marca} [Color: ${mItem.color}]`;
+                        const existente = carrito.find(x => x.id === p.id && x.nota === notaUnica);
+                        if (existente) { existente.cantidad += parseInt(mItem.cantidad); } 
+                        else { carrito.push({ id: p.id, n: p.nombre, p: parseFloat(p.precio), cantidad: parseInt(mItem.cantidad), tipo: 'tintoreria', nota: notaUnica, detalles: mItem }); }
+                    });
+                    window.saveCart(); window.renderCart(); notificar('success', 'Agregado');
+                }
+            } else {
+                const { value: f } = await Swal.fire({
+                    title: `Detalles: ${p.nombre}`, html: getEl('tplTintoreria').innerHTML, showCloseButton: true, focusConfirm: false,
+                    preConfirm: () => {
+                        const pr = getEl('tin-prenda').value; if(!pr) return Swal.showValidationMessage('Falta prenda');
+                        return { prenda: pr, color: getEl('tin-color-picker').value, marca: getEl('tin-marca').value, detalles: getEl('tin-detalles').value }
+                    }
+                });
+                if(f) {
+                    const nota = `${f.prenda.toUpperCase()} - ${f.marca} [Color: ${f.color}]`;
+                    const ex = carrito.find(x => x.id === p.id && x.nota === nota);
+                    if(ex) ex.cantidad++; else carrito.push({ id: p.id, n: p.nombre, p: parseFloat(p.precio), cantidad: 1, tipo: 'tintoreria', nota: nota, detalles: f });
+                    window.saveCart(); window.renderCart();
+                }
+            }
+        } else {
+            itemTemp = {...p}; getEl('lblProd').innerText = p.nombre; getEl('secPeso').style.display = 'none'; getEl('secCantidad').style.display = 'block'; getEl('inpCantidadModal').value = 1;
+            modalProdBS.show(); setTimeout(()=>getEl('inpCantidadModal').focus(), 500);
+        }
+    };
+
+    window.addMassItem = function() {
+        const qty = parseInt(getEl('tm-qty').value) || 1;
+        const prenda = getEl('tm-prenda').value.trim();
+        const color = getEl('tm-color').value.trim();
+        const detalles = getEl('tm-detalles').value.trim();
+
+        if(!prenda) return getEl('tm-prenda').focus(); 
+
+        // Agregamos a la lista temporal (Aquí no agrupamos, para que el usuario vea lo que hace)
+        massList.push({ 
+            cantidad: qty, 
+            prenda, 
+            color: color || 'Sin color', 
+            marca: detalles || '', 
+            detalles 
+        });
+
+        window.renderMassTable();
+
+        // Limpieza inteligente (Dejamos el cursor en prenda para seguir rápido)
+        getEl('tm-qty').value = 1;
+        getEl('tm-prenda').value = '';
+        getEl('tm-color').value = '';
+        getEl('tm-detalles').value = '';
+        getEl('tm-prenda').focus();
+    };
+
+    window.renderMassTable = function() {
+        const tbody = getEl('tm-lista');
+        let totalItems = 0;
+        
+        tbody.innerHTML = massList.map((item, index) => {
+            totalItems += item.cantidad;
+            return `
+            <tr>
+                <td class="text-center fw-bold text-primary fs-6">${item.cantidad}</td>
+                <td class="fw-bold">${item.prenda}</td>
+                <td>${item.color}</td>
+                <td class="text-end"><i class="bi bi-x-circle text-danger pointer" onclick="window.removeMassItem(${index})"></i></td>
+            </tr>`;
+        }).join('');
+        
+        getEl('tm-count').innerText = totalItems;
+        
+        // Auto-scroll
+        tbody.parentElement.parentElement.scrollTop = tbody.parentElement.parentElement.scrollHeight;
+    };
+
+    window.removeMassItem = function(index) {
+        massList.splice(index, 1);
+        window.renderMassTable();
+    };
    
    window.addCart = function() {
        const val = parseFloat(getEl('inpCantidadModal').value);
@@ -286,25 +421,41 @@
    /* =========================================
       4. COBRO
       ========================================= */
+    // --- REEMPLAZAR EN public/app.js ---
+
     window.cobrar = async function() { 
         if(carrito.length===0) return notificar('warning','Vacío');
+
+        if(!turnoActivo) {
+            return Swal.fire({
+                icon: 'error', 
+                title: '¡Caja Cerrada!', 
+                text: 'Debes abrir turno antes de cobrar.',
+                confirmButtonText: 'Abrir ahora',
+                preConfirm: () => window.abrirTurnoUI()
+            });
+        }
         
         const total = carrito.reduce((a,b)=>a+(parseFloat(b.p||b.precio)*b.cantidad),0);
         
         await Swal.fire({ 
-            title:'', 
+            title: 'Total a Pagar', // Agregué título para que la X se alinee mejor
             html: getEl('tplCobro').innerHTML, 
             showConfirmButton: false, 
+            showCloseButton: true, // Forzamos la X aquí también
+            width: '600px', // Un poco más ancha para que se vea mejor
             didOpen: () => { 
                 getEl('lblTotalDisplay').innerText = `$${total.toFixed(2)}`; 
                 getEl('lblTotal').innerText = total; 
                 
-                // FECHA SUGERIDA (Hoy + días config)
+                // FECHA SUGERIDA
                 const fechaSugerida = new Date();
                 fechaSugerida.setDate(fechaSugerida.getDate() + (window.DIAS_ENTREGA || 2));
                 getEl('c-fecha-entrega').value = fechaSugerida.toISOString().slice(0,10);
 
-                // LIMPIAR INPUTS (Para que empiecen en 0/vacíos)
+                getEl('c-hora-entrega').value = '';
+
+                // LIMPIAR INPUTS
                 getEl('p-efectivo').value = ''; 
                 getEl('p-tarjeta').value = ''; 
                 
@@ -317,8 +468,257 @@
             } 
         }); 
     };
-   
-   // REEMPLAZAR ESTA FUNCIÓN EN app.js
+
+    // --- PEGAR EN public/app.js ---
+
+    // 1. FUNCIÓN PRINCIPAL DE BÚSQUEDA
+    window.buscarOrden = async function() {
+        const input = getEl('inputBusquedaFolio');
+        const folio = input.value.trim().toUpperCase();
+        const resultDiv = getEl('search-result');
+
+        if (folio.length < 3) return Swal.fire('Error', 'Escribe un folio válido (Ej. PB-001)', 'warning');
+
+        // Efecto de carga
+        Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
+
+        try {
+            const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
+            const data = await r.json();
+            
+            Swal.close();
+
+            if (!data || !data.orden) {
+                resultDiv.style.display = 'none';
+                return Swal.fire('No encontrado', 'Revisa que el folio sea correcto y pertenezca a esta sucursal.', 'error');
+            }
+
+            const o = data.orden;
+            const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
+
+            // --- LLENAR DATOS ---
+            safeText('res-folio', o.folio);
+            safeText('res-cliente', o.cliente_nombre);
+            safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
+            safeText('res-total', money(o.total));
+            safeText('res-pagado', money(o.monto_pagado));
+            
+            // Saldo
+            const elSaldo = getEl('res-saldo');
+            elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
+            elSaldo.className = saldo > 0.5 ? 'text-danger' : 'text-success';
+
+            // Items
+            getEl('res-items').innerHTML = data.items.map(i => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold">${i.cantidad}x ${i.servicio}</span>
+                        ${i.notas ? `<br><small class="text-muted">${i.notas}</small>` : ''}
+                    </div>
+                    <span class="fw-bold">$${(i.cantidad * i.precio_unitario).toFixed(2)}</span>
+                </li>
+            `).join('');
+
+            // Pagos Historial
+            getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
+                <div class="d-flex justify-content-between small border-bottom py-1">
+                    <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
+                    <span class="fw-bold text-success">${money(p.monto)}</span>
+                </div>
+            `).join('') : '<small class="text-muted">Sin pagos registrados</small>';
+
+            // --- LÓGICA DE LA LÍNEA DE TIEMPO (TIMELINE) ---
+            updateTimeline(o.estatus);
+
+            // --- INFORMACIÓN DE ENTREGA ---
+            const divEnt = getEl('res-delivery-info');
+            if (o.estatus === 'entregado') {
+                divEnt.style.display = 'block';
+                safeText('res-entregador', data.delivery_info.entregado_por || 'Staff');
+                if(o.fecha_real_entrega) {
+                    safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
+                }
+            } else {
+                divEnt.style.display = 'none';
+            }
+
+            // Mostrar todo
+            resultDiv.style.display = 'block';
+            input.value = ''; // Limpiar campo
+
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Fallo al buscar la orden', 'error');
+        }
+    };
+
+    // 2. HELPER PARA LA BARRA DE PROGRESO
+    function updateTimeline(estatus) {
+        const bar = getEl('res-bar');
+        const stText = getEl('res-status-text');
+        
+        // Reset iconos
+        ['lav','lis','ent'].forEach(k => getEl('icon-'+k).className = 'bi bi-circle text-muted');
+
+        let w = '0%';
+        let color = 'bg-secondary';
+        let texto = 'PENDIENTE';
+
+        if (estatus === 'pendiente') {
+            w = '15%'; color = 'alert-secondary';
+        } else if (estatus === 'lavando') {
+            w = '50%'; color = 'alert-info'; texto = 'EN PROCESO / LAVANDO';
+            getEl('icon-lav').className = 'bi bi-water text-info';
+        } else if (estatus === 'listo') {
+            w = '75%'; color = 'alert-success'; texto = 'LISTO PARA ENTREGA';
+            getEl('icon-lav').className = 'bi bi-check-circle-fill text-success';
+            getEl('icon-lis').className = 'bi bi-check-circle-fill text-success';
+        } else if (estatus === 'entregado') {
+            w = '100%'; color = 'alert-dark text-center bg-dark text-white'; texto = 'ENTREGADO AL CLIENTE';
+            getEl('icon-lav').className = 'bi bi-check-circle-fill text-success';
+            getEl('icon-lis').className = 'bi bi-check-circle-fill text-success';
+            getEl('icon-ent').className = 'bi bi-box-seam-fill text-dark';
+        } else if (estatus === 'cancelada') {
+            w = '100%'; color = 'alert-danger'; texto = 'ORDEN CANCELADA';
+            bar.className = 'progress-bar bg-danger';
+        }
+
+        bar.style.width = w;
+        stText.className = `alert ${color} fw-bold border mt-3 mb-0 text-center`;
+        stText.innerText = texto;
+    }
+    
+
+    let turnoActivo = null; // Variable global para saber si podemos vender
+
+    /* =========================================
+   SISTEMA DE CAJA BLINDADA (COMPATIBLE CON NUEVO SERVIDOR)
+   ========================================= */
+
+    // 1. CHEQUEO DE ESTADO
+    window.checkTurno = async function() { 
+        try {
+            const btnStatus = document.getElementById('turnoStatus');
+            const r = await fetch(`/api/gestion/turno/estado?sucursal_id=${sucursalID}`);
+            const d = await r.json();
+            
+            if(d.abierto) {
+                turnoActivo = d.turno; // Guardamos el turno para permitir ventas
+                btnStatus.className = 'p-2 rounded-2 bg-success text-white text-center small fw-bold pointer shadow-sm';
+                btnStatus.innerHTML = '<i class="bi bi-unlock-fill"></i> CAJA ABIERTA';
+                btnStatus.onclick = () => window.cerrarTurnoUI(); 
+            } else {
+                turnoActivo = null; // Bloqueamos ventas
+                btnStatus.className = 'p-2 rounded-2 bg-danger text-white text-center small fw-bold pointer shadow-sm';
+                btnStatus.innerHTML = '<i class="bi bi-lock-fill"></i> CAJA CERRADA';
+                btnStatus.onclick = () => window.abrirTurnoUI(); 
+            }
+        } catch(e) { console.error("Error turno:", e); }
+    };
+
+    // 2. ABRIR CAJA
+    window.abrirTurnoUI = async function() {
+        const { value: monto } = await Swal.fire({
+            title: '☀️ Apertura de Caja',
+            text: '¿Con cuánto dinero (fondo) inicias el turno?',
+            icon: 'info',
+            input: 'number',
+            inputPlaceholder: 'Ej. 500.00',
+            confirmButtonText: 'Abrir Caja',
+            showCancelButton: true,
+            allowOutsideClick: false
+        });
+
+        if(monto) {
+            // Nota: Enviamos 'monto_inicial' que es lo que espera el nuevo servidor
+            const r = await fetch('/api/gestion/turno/abrir', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sucursal_id: sucursalID, usuario_id: usuario.id, monto_inicial: monto })
+            });
+            if(r.ok) {
+                Swal.fire('¡Éxito!', 'Caja abierta. Ya puedes realizar ventas.', 'success');
+                window.checkTurno();
+            } else {
+                const err = await r.json();
+                Swal.fire('Error', err.error || 'No se pudo abrir la caja', 'error');
+            }
+        }
+    };
+
+    // 3. CERRAR CAJA (CORTE CIEGO)
+    // 3. CERRAR CAJA (CORTE 100% CIEGO - SIN MOSTRAR RESULTADOS AL EMPLEADO)
+    window.cerrarTurnoUI = async function() {
+        // Paso 1: Advertencia
+        const { isConfirmed } = await Swal.fire({
+            title: '¿Cerrar Turno?',
+            text: "Al confirmar, se cerrará la venta y se registrará el monto.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, contar dinero',
+            confirmButtonColor: '#d33',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if(!isConfirmed) return;
+
+        // Paso 2: Conteo Ciego (El cajero solo pone lo que hay físicamente)
+        const { value: conteo } = await Swal.fire({
+            title: '🔐 Corte de Caja',
+            html: `
+                <p class="small text-muted">Cuenta todo el efectivo (billetes y monedas) que tienes en el cajón.</p>
+                <h3 class="fw-bold">¿Cuánto hay en total?</h3>
+                <input id="input-corte" type="number" class="swal2-input" placeholder="$0.00">
+            `,
+            focusConfirm: false,
+            allowOutsideClick: false,
+            preConfirm: () => {
+                const v = document.getElementById('input-corte').value;
+                if(!v) Swal.showValidationMessage('Debes ingresar el monto contado');
+                return v;
+            }
+        });
+
+        if(conteo) {
+            // Bloqueamos pantalla mientras procesa
+            Swal.fire({ title: 'Procesando cierre...', didOpen: () => Swal.showLoading() });
+
+            try {
+                // Enviamos al servidor
+                const r = await fetch('/api/gestion/turno/cerrar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ sucursal_id: sucursalID, usuario_id: usuario.id, monto_reportado: conteo })
+                });
+                const d = await r.json();
+
+                if(d.success) {
+                    // --- CAMBIO CLAVE AQUÍ ---
+                    // Ya NO mostramos las matemáticas (ni faltantes, ni sobrantes, ni esperado)
+                    // Solo confirmamos que se guardó.
+                    
+                    await Swal.fire({
+                        title: 'Turno Cerrado',
+                        text: 'El corte se ha registrado correctamente. El administrador revisará el balance.',
+                        icon: 'success',
+                        confirmButtonText: 'Entendido'
+                    });
+
+                    window.checkTurno(); // Actualiza el botón a ROJO (Cerrado)
+                    window.location.reload(); // Recarga para limpiar todo y pedir login si es necesario
+                } else {
+                    Swal.fire('Error', d.error || 'Error al cerrar turno', 'error');
+                }
+            } catch(e) {
+                Swal.fire('Error', 'Fallo de conexión', 'error');
+            }
+        }
+    };
+
+    // Alias para el botón de la configuración
+    window.hacerCorteZ = async function() { window.cerrarTurnoUI(); };
+
+
 
     window.calcPagos = function() { 
         const total = parseFloat(getEl('lblTotal').innerText); 
@@ -371,6 +771,9 @@
     };
    
    window.finalizarVentaMulti = async function(total, pagos) { 
+
+        const h = document.getElementById('c-hora-entrega');
+
         const dom = getEl('entDom').checked; 
         
         // Capturar fecha del calendario
@@ -388,6 +791,7 @@
                 entrega: dom ? 'domicilio' : 'tienda', 
                 direccion: dom ? getEl('c-dir').value : '', 
                 factura: getEl('c-factura').checked,
+                horario_entrega: getEl('c-hora-entrega').value,
                 fecha_entrega: fechaEntregaManual // <--- ESTO ES LO NUEVO
             } 
         }; 
@@ -415,6 +819,7 @@
             Swal.fire('Error', e.message, 'error'); 
         } 
     };
+
    window.toggleEntrega = function() { const d=getEl('entDom').checked; getEl('secEnvio').style.display=d?'block':'none'; window.calcTotal(); };
    window.calcTotal = function() { let base = carrito.reduce((a,b)=>a+(parseFloat(b.p||b.precio)*b.cantidad),0); let env = getEl('entDom').checked ? parseFloat(getEl('c-costo').value||0) : 0; let g = base + env; getEl('lblTotalDisplay').innerText = `$${g.toFixed(2)}`; getEl('lblTotal').innerText = g; window.calcPagos(); };
    
@@ -517,20 +922,47 @@
    /* =========================================
       6. KANBAN Y ORDENES
       ========================================= */
-   window.loadKanban = async function() { 
-       ['k-pend','k-lav','k-list'].forEach(id=>getEl(id).innerHTML=''); 
-       const r = await fetch(`/api/ordenes/listado?sucursal_id=${sucursalID}`); 
-       const ord = await r.json(); 
-       ord.forEach(o => { 
-           let c='', b='', estiloCard='border-left: 4px solid var(--accent) !important;', iconoAlerta=''; 
-           let btnWA = o.telefono ? `<a href="https://wa.me/52${o.telefono.replace(/\D/g,'')}" target="_blank" class="btn btn-sm btn-success text-white ms-1" onclick="event.stopPropagation()"><i class="bi bi-whatsapp"></i></a>` : '';
-           let diasAnt = o.fecha_creacion ? Math.floor(Math.abs(new Date() - new Date(o.fecha_creacion)) / 86400000) : 0; 
-           if(o.estatus==='pendiente') { c='k-pend'; b=`<div class="d-flex"><button class="btn btn-sm btn-info w-100 text-white fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'lavando')">Lavando ➡️</button>${btnWA}</div>`; } 
-           else if(o.estatus==='lavando') { c='k-lav'; b=`<div class="d-flex"><button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'listo')">Listo ✅</button>${btnWA}</div>`; } 
-           else if(o.estatus==='listo') { c='k-list'; b=`<div class="d-flex"><button class="btn btn-sm btn-dark w-100 fw-bold shadow-sm" onclick="window.entregar(${o.id})">Entregar 👋</button>${btnWA}</div>`; if(diasAnt >= DIAS_ABANDONO) { estiloCard='border-left: 4px solid #6f42c1 !important; background-color: #f3e5f5;'; iconoAlerta=`<div class="badge bg-purple text-white mb-1" style="background:#6f42c1">🕸️ OLVIDADO (${diasAnt} DÍAS)</div>`; } } 
-           if(c) getEl(c).innerHTML += `<div class="card p-3 mb-2 shadow-sm border-0 rounded-3" style="cursor:pointer; ${estiloCard}" onclick="window.verDetalles(${o.id},'${o.folio}')">${iconoAlerta}<div class="d-flex justify-content-between mb-2"><span class="badge bg-light text-dark border">${o.folio}</span>${o.saldo>0?`<span class="badge bg-danger">DEBE ${money(o.saldo)}</span>`:'<span class="badge bg-success">PAGADO</span>'}</div><div class="fw-bold text-truncate">${o.cliente}</div><div class="small text-muted mb-2">${money(o.total)}</div><div class="mt-2" onclick="event.stopPropagation()">${b}</div></div>`; 
-       }); 
-   };
+    window.loadKanban = async function() { 
+        ['k-pend','k-lav','k-list'].forEach(id=>getEl(id).innerHTML=''); 
+        const r = await fetch(`/api/ordenes/listado?sucursal_id=${sucursalID}`); 
+        const ord = await r.json(); 
+        
+        ord.forEach(o => { 
+            let c='', b='', estiloCard='border-left: 4px solid var(--accent) !important;', iconoAlerta=''; 
+            
+            // --- FORMATEAR FECHA Y HORA DE ENTREGA ---
+            let textoEntrega = '';
+            if(o.fecha_entrega) {
+                const fDB = new Date(o.fecha_entrega);
+                fDB.setHours(fDB.getHours() + 12);
+                const fechaStr = fDB.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'});
+                textoEntrega = `📅 ${fechaStr} ${o.horario_entrega ? '('+o.horario_entrega+')' : ''}`;
+            }
+            // -----------------------------------------
+
+            let btnWA = o.telefono ? `<a href="https://wa.me/52${o.telefono.replace(/\D/g,'')}" target="_blank" class="btn btn-sm btn-success text-white ms-1" onclick="event.stopPropagation()"><i class="bi bi-whatsapp"></i></a>` : '';
+            let diasAnt = o.fecha_creacion ? Math.floor(Math.abs(new Date() - new Date(o.fecha_creacion)) / 86400000) : 0; 
+            
+            if(o.estatus==='pendiente') { c='k-pend'; b=`<div class="d-flex"><button class="btn btn-sm btn-info w-100 text-white fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'lavando')">Lavando ➡️</button>${btnWA}</div>`; } 
+            else if(o.estatus==='lavando') { c='k-lav'; b=`<div class="d-flex"><button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'listo')">Listo ✅</button>${btnWA}</div>`; } 
+            else if(o.estatus==='listo') { c='k-list'; b=`<div class="d-flex"><button class="btn btn-sm btn-dark w-100 fw-bold shadow-sm" onclick="window.entregar(${o.id})">Entregar 👋</button>${btnWA}</div>`; if(diasAnt >= DIAS_ABANDONO) { estiloCard='border-left: 4px solid #6f42c1 !important; background-color: #f3e5f5;'; iconoAlerta=`<div class="badge bg-purple text-white mb-1" style="background:#6f42c1">🕸️ OLVIDADO (${diasAnt} DÍAS)</div>`; } } 
+            
+            if(c) getEl(c).innerHTML += `
+            <div class="card p-3 mb-2 shadow-sm border-0 rounded-3" style="cursor:pointer; ${estiloCard}" onclick="window.verDetalles(${o.id},'${o.folio}')">
+                ${iconoAlerta}
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="badge bg-light text-dark border">${o.folio}</span>
+                    ${o.saldo>0?`<span class="badge bg-danger">DEBE ${money(o.saldo)}</span>`:'<span class="badge bg-success">PAGADO</span>'}
+                </div>
+                <div class="fw-bold text-truncate">${o.cliente}</div>
+                
+                <div class="small text-primary fw-bold my-1">${textoEntrega}</div>
+                
+                <div class="small text-muted mb-2">${money(o.total)}</div>
+                <div class="mt-2" onclick="event.stopPropagation()">${b}</div>
+            </div>`; 
+        }); 
+    };
    
    // --- FUNCIÓN DE CAMBIO DE ESTATUS INTELIGENTE ---
    window.cambiarEstatus = async function(id, s) { 
@@ -575,112 +1007,342 @@
        } catch (e) { Swal.fire('Error', 'No se pudo cargar', 'error'); }
    };
    
-   window.abrirLiquidacion = function(id, saldo) { ordenPorLiquidar = { id, saldo }; getEl('liqMonto').innerText = `$${saldo.toFixed(2)}`; new bootstrap.Modal(getEl('modalLiquidar')).show(); };
-   window.confirmarLiquidacion = async function(metodo) { if (!ordenPorLiquidar) return; await fetch('/api/ordenes/liquidar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orden_id: ordenPorLiquidar.id, monto: ordenPorLiquidar.saldo, metodo_pago: metodo, usuario_id: usuario.id, sucursal_id: sucursalID }) }); bootstrap.Modal.getInstance(getEl('modalLiquidar')).hide(); bootstrap.Modal.getInstance(getEl('modalDetalles')).hide(); Swal.fire('Pagado', '', 'success'); window.loadKanban(); };
-   window.cancelarOrdenDesdeModal = async function() { const id = getEl('modalDetalles').getAttribute('data-id'); const { value: m } = await Swal.fire({ title: 'Motivo cancelación', input: 'text', showCancelButton: true }); if (m) { await fetch('/api/ordenes/cancelar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, motivo: m }) }); bootstrap.Modal.getInstance(getEl('modalDetalles')).hide(); window.loadKanban(); } };
+   // --- PEGAR ESTO EN public/app.js (Reemplazando la window.abrirLiquidacion anterior) ---
+
+window.abrirLiquidacion = function(id, saldo) { 
+    ordenPorLiquidar = { id, saldo }; 
+    
+    // 1. Mostrar el monto de la deuda
+    getEl('liqMonto').innerText = `$${saldo.toFixed(2)}`;
+    
+    // 2. Limpiar la calculadora (Reseteo)
+    getEl('liq-recibido').value = ''; 
+    getEl('liq-cambio').innerText = '$0.00';
+    getEl('liq-cambio').className = 'h4 fw-bold text-muted'; // Color gris inicial
+
+    // 3. Abrir el modal
+    new bootstrap.Modal(getEl('modalLiquidar')).show(); 
+    
+    // 4. Poner el cursor en el input automáticamente para escribir rápido
+    setTimeout(() => getEl('liq-recibido').focus(), 500);
+};
+
+// --- NUEVA FUNCIÓN MATEMÁTICA ---
+    window.calcCambioLiq = function() {
+        if (!ordenPorLiquidar) return;
+        
+        // Obtenemos valores
+        const deuda = parseFloat(ordenPorLiquidar.saldo);
+        const recibido = parseFloat(getEl('liq-recibido').value);
+
+        // Calculamos cambio
+        if (recibido) {
+            const cambio = recibido - deuda;
+            
+            if (cambio >= 0) {
+                // Si alcanza
+                getEl('liq-cambio').innerText = `$${cambio.toFixed(2)}`;
+                getEl('liq-cambio').className = 'h4 fw-bold text-success'; // Verde
+            } else {
+                // Si falta dinero
+                getEl('liq-cambio').innerText = `Falta $${Math.abs(cambio).toFixed(2)}`;
+                getEl('liq-cambio').className = 'h4 fw-bold text-danger'; // Rojo
+            }
+        } else {
+            // Si borra el número
+            getEl('liq-cambio').innerText = '$0.00';
+            getEl('liq-cambio').className = 'h4 fw-bold text-muted';
+        }
+    };
+
+    window.confirmarLiquidacion = async function(metodo) { if (!ordenPorLiquidar) return; await fetch('/api/ordenes/liquidar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orden_id: ordenPorLiquidar.id, monto: ordenPorLiquidar.saldo, metodo_pago: metodo, usuario_id: usuario.id, sucursal_id: sucursalID }) }); bootstrap.Modal.getInstance(getEl('modalLiquidar')).hide(); bootstrap.Modal.getInstance(getEl('modalDetalles')).hide(); Swal.fire('Pagado', '', 'success'); window.loadKanban(); };
+    // --- CAMBIAR EN public/app.js ---
+    // --- PEGAR EN public/app.js ---
+
+    window.cancelarOrdenDesdeModal = async function() { 
+        // 1. Identificamos el modal y sus datos
+        const modalEl = document.getElementById('modalDetalles');
+        const id = modalEl.getAttribute('data-id');
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+
+        // 2. CERRAMOS EL MODAL PRIMERO (Esto elimina el bloqueo del teclado)
+        bsModal.hide();
+
+        // 3. Esperamos un instante a que se cierre y lanzamos la pregunta
+        setTimeout(async () => {
+            const { value: m } = await Swal.fire({ 
+                title: '¿Por qué cancelas?', 
+                text: 'Esta acción registrará el evento en auditoría.',
+                input: 'text', 
+                inputPlaceholder: 'Escribe el motivo...',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sí, Cancelar',
+                cancelButtonText: 'Volver'
+            }); 
+            
+            if (m) { 
+                // SI ESCRIBIÓ Y CONFIRMÓ:
+                try {
+                    const r = await fetch('/api/ordenes/cancelar', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ id, motivo: m, usuario_id: usuario ? usuario.id : 1 }) 
+                    });
+                    
+                    if(r.ok) {
+                        window.loadKanban(); 
+                        Swal.fire('Cancelada', 'Orden cancelada correctamente', 'success');
+                    } else {
+                        Swal.fire('Error', 'No se pudo cancelar', 'error');
+                    }
+                } catch(e) {
+                    Swal.fire('Error', 'Fallo de red', 'error');
+                }
+            } else { 
+                // SI SE ARREPIENTE O CIERRA: Volvemos a abrir el modal original
+                bsModal.show();
+            }
+        }, 300); // Pequeña pausa para que la animación se vea fluida
+    };
    
    /* =========================================
       7. CONFIGURACIÓN Y TICKET
       ========================================= */
-   window.loadConfig = async function() { 
-       if((usuario.rol||'').toLowerCase().trim()!=='admin') return; 
-       const r = await fetch(`/api/gestion/config?sucursal_id=${sucursalID}`); 
-       const c = await r.json(); 
-       if(c) { 
-           if(getEl('conf-header')) getEl('conf-header').value = c.ticket_header;
-           if(getEl('conf-dir')) getEl('conf-dir').value = c.direccion;
-           if(getEl('conf-tel')) getEl('conf-tel').value = c.telefono;
-           if(getEl('conf-footer')) getEl('conf-footer').value = c.ticket_footer;
-           if(getEl('conf-legal')) getEl('conf-legal').value = c.ticket_legal;
-           if(getEl('conf-precio-kilo')) getEl('conf-precio-kilo').value = c.precio_kilo;
-           if(getEl('conf-min-kilos')) getEl('conf-min-kilos').value = c.minimo_kilos;
-           if(getEl('conf-fondo')) getEl('conf-fondo').value = c.fondo_caja_default;
-           if(getEl('conf-dias-abandono')) getEl('conf-dias-abandono').value = c.dias_abandono;
-           if(getEl('conf-dias-entrega')) getEl('conf-dias-entrega').value = c.dias_entrega; 
-           localStorage.setItem('config_sys', JSON.stringify(c)); 
-           DIAS_ENTREGA = parseInt(c.dias_entrega) || 2;
-           PRECIO_KILO = parseFloat(c.precio_kilo) || 32;
-       } 
-   };
+    // --- REEMPLAZAR ESTAS 2 FUNCIONES EN app.js ---
+
+    window.loadConfig = async function() { 
+        // Solo si es admin, y pasamos el ID de sucursal
+        if((usuario.rol||'').toLowerCase().trim()!=='admin') return; 
+        
+        const r = await fetch(`/api/gestion/config?sucursal_id=${sucursalID}`); 
+        const c = await r.json(); 
+        
+        // Llenar los campos (si existen datos)
+        if(c) { 
+            if(getEl('conf-header')) getEl('conf-header').value = c.ticket_header || '';
+            if(getEl('conf-dir')) getEl('conf-dir').value = c.direccion || '';
+            if(getEl('conf-tel')) getEl('conf-tel').value = c.telefono || '';
+            if(getEl('conf-footer')) getEl('conf-footer').value = c.ticket_footer || '';
+            if(getEl('conf-legal')) getEl('conf-legal').value = c.ticket_legal || '';
+            
+            if(getEl('conf-precio-kilo')) getEl('conf-precio-kilo').value = c.precio_kilo || 32;
+            if(getEl('conf-min-kilos')) getEl('conf-min-kilos').value = c.minimo_kilos || 3;
+            if(getEl('conf-fondo')) getEl('conf-fondo').value = c.fondo_caja_default || 0;
+            if(getEl('conf-dias-abandono')) getEl('conf-dias-abandono').value = c.dias_abandono || 30;
+            if(getEl('conf-dias-entrega')) getEl('conf-dias-entrega').value = c.dias_entrega || 2; 
+            
+            // Actualizamos variables globales
+            DIAS_ENTREGA = parseInt(c.dias_entrega) || 2;
+            PRECIO_KILO = parseFloat(c.precio_kilo) || 32;
+        } 
+    };
+
+    // --- PEGAR EN public/app.js ---
+
+    window.guardarConfigDB = async function() { 
+        if(!sucursalID) return Swal.fire('Error', 'No se ha detectado la sucursal activa', 'error');
+
+        const configData = { 
+            sucursal_id: sucursalID, // Esta variable debe existir globalmente
+            ticket_header: getEl('conf-header').value, 
+            direccion: getEl('conf-dir').value, 
+            telefono: getEl('conf-tel').value, 
+            ticket_footer: getEl('conf-footer').value, 
+            ticket_legal: getEl('conf-legal').value, 
+            precio_kilo: getEl('conf-precio-kilo').value, 
+            minimo_kilos: getEl('conf-min-kilos').value, 
+            fondo_caja_default: getEl('conf-fondo').value, 
+            dias_abandono: getEl('conf-dias-abandono').value, 
+            dias_entrega: getEl('conf-dias-entrega').value 
+        }; 
+
+        try { 
+            const r = await fetch('/api/gestion/config', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(configData) 
+            }); 
+            
+            const res = await r.json();
+
+            if(res.success) {
+                DIAS_ENTREGA = parseInt(configData.dias_entrega) || 2;
+                Swal.fire('Guardado', 'Configuración guardada correctamente.', 'success'); 
+            } else {
+                Swal.fire('Error', res.error || 'No se pudo guardar', 'error');
+            }
+        } catch(e) { 
+            console.error(e);
+            Swal.fire('Error de Conexión', 'Revisa la terminal del servidor', 'error');
+        } 
+    };
    
-   window.guardarConfigDB = async function() { 
-       const configData = { sucursal_id: sucursalID, ticket_header: getEl('conf-header').value, direccion: getEl('conf-dir').value, telefono: getEl('conf-tel').value, ticket_footer: getEl('conf-footer').value, ticket_legal: getEl('conf-legal').value, precio_kilo: getEl('conf-precio-kilo').value, minimo_kilos: getEl('conf-min-kilos').value, fondo_caja_default: getEl('conf-fondo').value, dias_abandono: getEl('conf-dias-abandono').value, dias_entrega: getEl('conf-dias-entrega').value }; 
-       try { 
-           await fetch('/api/gestion/config', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(configData) }); 
-           localStorage.setItem('config_sys', JSON.stringify(configData));
-           DIAS_ENTREGA = parseInt(configData.dias_entrega) || 2;
-           Swal.fire('Guardado', 'Configuración actualizada', 'success'); 
-       } catch(e) { console.error(e); } 
-   };
-   
-   window.imprimirTicketWeb = async function(folio) {
+    // --- PEGAR EN public/app.js ---
+
+    // --- EN public/app.js ---
+
+    // --- PEGAR EN public/app.js ---
+
+    // --- PEGAR EN public/app.js ---
+
+    window.imprimirTicketWeb = async function(folio) {
         try {
+            if (!folio) { console.error("Intento de imprimir sin folio"); return; }
+
+            // 1. OBTENER CONFIG
             let tc = {};
-            try { const rConf = await fetch(`/api/gestion/config?sucursal_id=${sucursalID}`); tc = await rConf.json(); } catch(e) { tc = JSON.parse(localStorage.getItem('config_sys') || '{}'); }
+            try { 
+                const rConf = await fetch(`/api/gestion/config?sucursal_id=${sucursalID}`); 
+                tc = await rConf.json(); 
+            } catch(e) { tc = {}; }
             
             const header = tc.ticket_header || 'LAVANDERÍA'; 
             const address = tc.direccion || ''; 
             const phone = tc.telefono || ''; 
             const footer = tc.ticket_footer || 'Gracias'; 
-            const legal = tc.ticket_legal || '.'; 
+            const legal = tc.ticket_legal || ''; 
             
-            // Obtenemos los datos de la orden
-            const rOrder = await fetch(`/api/ordenes/${folio}/full`); 
-            const data = await rOrder.json(); 
-            const o = data.info; 
-            const items = data.items;
+            // 2. OBTENER DATOS ORDEN (CON MANEJO DE ERROR 404)
+            const rOrder = await fetch(`/api/ordenes/${folio}/full?sucursal_id=${sucursalID}`); 
             
-            const total = parseFloat(o.total); 
-            const pagado = parseFloat(o.monto_pagado); 
-            const saldo = total - pagado;
+            if (!rOrder.ok) {
+                Swal.fire('Atención', 'El ticket no se encontró inmediatamente. Puede que la venta sí se guardó. Búscalo en el historial.', 'warning');
+                return;
+            }
 
-            // --- CORRECCIÓN DE FECHA DE ENTREGA ---
-            let fechaEntregaEst;
+            const data = await rOrder.json(); 
+            if (!data || !data.info) {
+                throw new Error("Datos de orden incompletos");
+            }
+
+            const o = data.info; 
+            const items = data.items || [];
             
+            // 3. CÁLCULOS
+            const total = parseFloat(o.total || 0); 
+            const pagado = parseFloat(o.monto_pagado || 0); 
+            const saldo = total - pagado;
+            const subtotal = total / 1.16;
+            const iva = total - subtotal;
+
+            // 4. FECHAS
+            let fechaEntregaEst;
             if (o.fecha_entrega) {
-                // SI HAY FECHA EN DB (CALENDARIO), USARLA
-                // Creamos la fecha y le sumamos horas para evitar que la zona horaria la regrese un día
                 const fDB = new Date(o.fecha_entrega);
                 fDB.setHours(fDB.getHours() + 12); 
                 fechaEntregaEst = fDB.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
             } else {
-                // SI NO (Orden vieja), USAR CONFIGURACIÓN
                 const diasE = parseInt(tc.dias_entrega) || 2;
                 const fechaObj = new Date(); 
                 fechaObj.setDate(fechaObj.getDate() + diasE);
                 fechaEntregaEst = fechaObj.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
             }
-            // --------------------------------------
+            const horarioTexto = o.horario_entrega ? `(${o.horario_entrega})` : '';
             
+            // 5. HTML DEL TICKET (TU DISEÑO NUEVO)
             const html = `
-                <div class="ticket-page" style="width:58mm; margin:0 auto; padding-bottom: 20px; page-break-after: always; font-family: monospace;">
-                    <div style="text-align:center; margin-bottom:10px;"><b style="font-size:16px;">${header}</b><br>${address}<br>Tel: ${phone}<br>${new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', hour12:true})}</div>
-                    <div style="border-bottom:1px dashed #000; margin:5px 0;"></div>
-                    <div style="display:flex; justify-content:space-between;"><span>FOLIO:</span><b>#${o.folio}</b></div>
-                    <div>CLIENTE: <b>${o.cliente.substring(0, 20)}</b></div>
-                    
-                    <div style="margin: 10px 0; border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold; font-size: 14px;">ENTREGA ESTIMADA:<br>${fechaEntregaEst.toUpperCase()}</div>
-                    
-                    <div style="border-bottom:1px dashed #000; margin:5px 0;"></div>
-                    ${items.map(i => `<div style="display:flex; justify-content:space-between; margin-bottom:3px;"> <span style="width:15%; font-weight:bold;">${i.cantidad}</span> <span style="width:60%;">${i.servicio}</span> <span style="width:25%; text-align:right;">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</span> </div>`).join('')}
-                    <div style="border-bottom:1px dashed #000; margin:5px 0;"></div>
-                    <div style="text-align:right; font-size:14px; font-weight:bold;">TOTAL: $${total.toFixed(2)}</div>
-                    <div style="text-align:right; font-size:12px;">Abonado: $${pagado.toFixed(2)}</div>
-                    <div style="text-align:center; margin:10px 0; padding:5px; font-weight:bold; ${saldo<1?'border:2px solid black':'background:black;color:white'}">${saldo<1?'★ PAGADO ★':`RESTA: $${saldo.toFixed(2)}`}</div>
-                    <div style="font-size:10px; text-align:justify; margin-top:5px;">${legal}</div>
-                    <div style="text-align:center; margin-top:10px; font-style:italic;">${footer}</div>
+                <div class="ticket-page" style="width:58mm; margin:0 auto; padding-bottom: 20px; page-break-after: always; font-family: 'Helvetica', 'Arial', sans-serif; font-size: 12px; color: #000;">
+                    <div style="text-align:center; margin-bottom:10px;">
+                        <b style="font-size:16px; text-transform:uppercase;">${header}</b><br>
+                        <span style="font-size:10px;">${address}</span><br>
+                        ${phone ? `<span style="font-size:10px;">Tel: ${phone}</span><br>` : ''}
+                        <span style="font-size:9px;">${new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', hour12:true})}</span>
+                    </div>
+                    <div style="border: 3px solid #000; border-radius: 8px; padding: 8px; margin: 10px 0; text-align: center;">
+                        <div style="border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 5px;">
+                            <span style="font-size: 10px; font-weight: bold; letter-spacing: 1px;">FOLIO / SERIE</span><br>
+                            <span style="font-size: 22px; font-weight: 900; letter-spacing: 1px; display:block; margin-top:2px;">${o.folio}</span>
+                        </div>
+                        <div style="padding-top: 2px;">
+                            <span style="font-size: 10px; font-weight: bold; letter-spacing: 1px;">CLIENTE</span><br>
+                            <span style="font-size: 16px; font-weight: 800; text-transform: uppercase; line-height: 1.1; display:block;">${(o.cliente||'').substring(0, 25)}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-bottom: 10px;">
+                        <span style="font-size:10px; font-weight:bold;">ENTREGA ESTIMADA:</span><br>
+                        <span style="font-size: 13px; font-weight: bold;">${fechaEntregaEst.toUpperCase()}</span> 
+                        <span style="font-size: 11px;">${horarioTexto}</span>
+                    </div>
+                    <div style="border-bottom: 2px dashed #000; margin: 5px 0;"></div>
+                    <table style="width: 100%; font-size: 11px; margin-bottom: 5px;">
+                    ${items.map(i => `
+                        <tr style="vertical-align: top;">
+                            <td style="width: 10%; font-weight: bold; padding-bottom: 4px;">${i.cantidad}</td>
+                            <td style="width: 65%; padding-bottom: 4px;">${i.servicio}</td>
+                            <td style="width: 25%; text-align: right; font-weight: bold; padding-bottom: 4px;">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                    </table>
+                    <div style="border-bottom: 2px dashed #000; margin: 5px 0;"></div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px;"><span>SUB:</span><span>$${subtotal.toFixed(2)}</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px;"><span>IVA (16%):</span><span>$${iva.toFixed(2)}</span></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:900; font-size:18px; margin-top:5px; align-items: center;">
+                        <span>TOTAL:</span><span>$${total.toFixed(2)}</span>
+                    </div>
+                    <div style="text-align:right; font-size:12px; margin-top: 5px;">Abonado: <b>$${pagado.toFixed(2)}</b></div>
+                    <div style="text-align:center; margin:10px 0; padding:6px; font-weight:bold; border-radius: 4px; ${saldo<1 ? 'border:2px solid #000;' : 'background:#000; color:#fff;'}">
+                        ${saldo < 1 ? '★ PAGADO ★' : `RESTA: $${saldo.toFixed(2)}`}
+                    </div>
+                    <div style="font-size:9px; text-align:justify; margin-top:10px; line-height: 1.2;">${legal}</div>
+                    <div style="text-align:center; margin-top:10px; font-style:italic; font-size:11px; font-weight:bold;">${footer}</div>
                     <div style="text-align:center;">.</div>
                 </div>`;
             
-            getEl('printableTicket').innerHTML = html + html; 
+            let contenidoFinal = "";
+            if (usuario && usuario.rol === 'delivery') {
+                contenidoFinal = html; 
+            } else {
+                contenidoFinal = html + html; 
+            }
+
+            getEl('printableTicket').innerHTML = contenidoFinal; 
             setTimeout(() => { window.print(); }, 800);
-        } catch (e) { console.error(e); }
+
+        } catch (e) { 
+            console.error(e); 
+            Swal.fire('Error', 'No se pudo generar el ticket visual.', 'error'); 
+        }
     };
    window.imprimirTicketDesdeModal = function() { const f = getEl('modalDetalles').getAttribute('data-folio'); if(f) window.imprimirTicketWeb(f); };
    
    /* =========================================
       8. UTILIDADES
       ========================================= */
+
+      /* --- PEGAR ESTO ANTES DE LA SECCIÓN 9. INICIALIZACIÓN --- */
+
+    window.cargarSelectorSucursales = async function() { 
+        const cont = document.getElementById('sucursal-selector-container'); 
+        if(!cont) return; 
+        
+        if((usuario.rol||'').toLowerCase().trim() === 'admin'){ 
+            try {
+                const r = await fetch('/api/gestion/sucursales'); 
+                const s = await r.json(); 
+                document.getElementById('selSucursal').innerHTML = s.map(x => 
+                    `<option value="${x.id}" ${x.id == sucursalID ? 'selected' : ''}>${x.nombre}</option>`
+                ).join(''); 
+                cont.style.display = 'block'; 
+            } catch(e) { console.error(e); }
+        } 
+    };
+
+    window.cambiarSucursal = function(id) { 
+        localStorage.setItem('sucursal_activa', id); 
+        location.reload(); 
+    };
+
+    window.confirmAction = async function(msg = '¿Seguro?') { 
+        const r = await Swal.fire({ 
+            title: msg, 
+            icon: 'warning', 
+            showCancelButton: true, 
+            confirmButtonText: 'Sí', 
+            cancelButtonText: 'No' 
+        }); 
+        return r.isConfirmed; 
+    };
    async function cargarSelectorSucursales() { const cont = getEl('sucursal-selector-container'); if(!cont) return; const r=await fetch('/api/gestion/sucursales'); const s=await r.json(); if((usuario.rol||'').toLowerCase().trim()==='admin'){ getEl('selSucursal').innerHTML=s.map(x=>`<option value="${x.id}" ${x.id==sucursalID?'selected':''}>${x.nombre}</option>`).join(''); cont.style.display='block'; } }
    function cambiarSucursal(id) { localStorage.setItem('sucursal_activa', id); location.reload(); }
    async function confirmAction(msg = '¿Seguro?') { const r = await Swal.fire({ title: msg, icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí' }); return r.isConfirmed; }
@@ -690,17 +1352,115 @@
    window.delProd = async function(id) { if(await confirmAction('¿Eliminar?')) { await fetch('/api/gestion/inventario/borrar', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id}) }); window.loadInv(); } };
    window.modalSucursal = async function(s = null) { const { value: f } = await Swal.fire({ title: s ? 'Editar' : 'Nueva', html: `<input id="sn" class="swal2-input" value="${s ? s.nombre : ''}" placeholder="Nombre"><input id="sp" class="swal2-input" value="${s ? s.prefijo : ''}" placeholder="Prefijo">`, preConfirm: () => { return { id: s ? s.id : null, nombre: getEl('sn').value, prefijo: getEl('sp').value, direccion: '', telefono: '' } } }); if (f) { await fetch('/api/gestion/sucursales/guardar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) }); window.loadSucursalesTable(); } }
    window.loadSucursalesTable = async function() { const r = await fetch('/api/gestion/sucursales'); const d = await r.json(); getEl('tblSucursales').innerHTML = d.map(s => `<tr><td>${s.nombre}</td><td>${s.prefijo}</td><td><button class="btn btn-sm btn-primary" onclick='window.modalSucursal(${JSON.stringify(s)})'>✏️</button></td></tr>`).join(''); }
-   window.modalUser = async function() { const { value: f } = await Swal.fire({ title: 'Nuevo', html: '<input id="un" class="swal2-input" placeholder="Nombre"><input id="uu" class="swal2-input" placeholder="Usuario"><input id="up" type="password" class="swal2-input" placeholder="Pass"><select id="ur" class="swal2-input"><option value="cajero">Cajero</option><option value="admin">Admin</option></select>', preConfirm: () => ({ nombre: getEl('un').value, usuario: getEl('uu').value, password: getEl('up').value, rol: getEl('ur').value, sucursal_id: sucursalID }) }); 
-       if (f) { 
-           const r = await fetch('/api/gestion/usuarios/crear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) }); 
-           if(!r.ok) return Swal.fire('Error', 'No se pudo crear (Usuario duplicado?)', 'error');
-           window.loadUsers(); 
-       } 
-   };
+   // --- EN public/app.js ---
+
+    // --- PEGAR EN public/app.js ---
+
+    window.modalUser = async function() { 
+        // 1. Cargamos las sucursales disponibles para listarlas
+        let optionsSucursal = '';
+        try {
+            const r = await fetch('/api/gestion/sucursales');
+            const sucursales = await r.json();
+            // Creamos las opciones del selector (Marcamos la actual por defecto)
+            optionsSucursal = sucursales.map(s => 
+                `<option value="${s.id}" ${s.id == sucursalID ? 'selected' : ''}>📍 ${s.nombre}</option>`
+            ).join('');
+        } catch(e) { optionsSucursal = `<option value="${sucursalID}">Sucursal Actual</option>`; }
+
+        const { value: f } = await Swal.fire({ 
+            title: 'Nuevo Usuario', 
+            html: `
+                <label class="small fw-bold text-muted w-100 text-start">Datos de Acceso</label>
+                <input id="un" class="swal2-input m-0 mb-2" placeholder="Nombre Completo">
+                <input id="uu" class="swal2-input m-0 mb-2" placeholder="Usuario (Login)">
+                <input id="up" type="password" class="swal2-input m-0 mb-3" placeholder="Contraseña">
+                
+                <label class="small fw-bold text-muted w-100 text-start">Rol y Ubicación</label>
+                <select id="ur" class="swal2-input m-0 mb-2">
+                    <option value="cajero">Cajero</option>
+                    <option value="delivery">Repartidor (Delivery)</option> 
+                    <option value="admin">Administrador</option>
+                </select>
+                
+                <select id="us" class="swal2-input m-0">
+                    ${optionsSucursal}
+                </select>
+                `, 
+            preConfirm: () => ({ 
+                nombre: getEl('un').value, 
+                usuario: getEl('uu').value, 
+                password: getEl('up').value, 
+                rol: getEl('ur').value, 
+                sucursal_id: getEl('us').value // <--- AQUÍ CAPTURAMOS LA SUCURSAL ELEGIDA
+            }) 
+        }); 
+        
+        if (f) { 
+            // Validación básica
+            if(!f.nombre || !f.usuario || !f.password) return Swal.showValidationMessage('Faltan datos');
+
+            const r = await fetch('/api/gestion/usuarios/crear', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(f) 
+            }); 
+            
+            if(!r.ok) return Swal.fire('Error', 'No se pudo crear. ¿Usuario duplicado?', 'error');
+            window.loadUsers(); 
+            Swal.fire('Creado', `Usuario asignado a la sucursal seleccionada.`, 'success');
+        } 
+    };
    window.loadUsers = async function() { const r = await fetch('/api/gestion/usuarios'); const u = await r.json(); getEl('tblUsers').innerHTML = u.map(x => `<tr><td>${x.nombre}</td><td>${x.rol}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.delUser(${x.id})">Borrar</button></td></tr>`).join(''); }
    window.delUser = async function(id) { if (await confirmAction()) { await fetch('/api/gestion/usuarios/borrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); window.loadUsers(); } }
-   window.loadAuditoria = async function() { try { const r = await fetch(`/api/gestion/auditoria?sucursal_id=${sucursalID}`); const d = await r.json(); const tbl = getEl('tblAudit'); if (!d || d.length === 0) { tbl.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-muted">No hay registros</td></tr>'; return; } tbl.innerHTML = d.map(a => `<tr><td><small>${a.fecha.split('T')[0]}</small></td><td><b>${a.usuario}</b></td><td>${a.accion}</td><td>${a.detalle||''}</td></tr>`).join(''); } catch(e) {} }
-   window.saveLocalPrint = function() { localStorage.setItem('pc', JSON.stringify({ f: getEl('local-font').value, w: getEl('conf-ancho').value })); };
+// --- PEGAR EN public/app.js ---
+
+    window.loadAuditoria = async function() { 
+        try { 
+            // Si soy admin, pido logs de la sucursal activa.
+            // (Ojo: Podríamos hacer un selector para ver TODAS las sucursales)
+            const r = await fetch(`/api/gestion/auditoria?sucursal_id=${sucursalID}`); 
+            const d = await r.json(); 
+            const tbl = getEl('tblAudit'); 
+            
+            if (!d || d.length === 0) { 
+                tbl.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-muted">No hay actividad registrada</td></tr>'; 
+                return; 
+            } 
+            
+            tbl.innerHTML = d.map(a => {
+                // Colores según la acción
+                let badgeColor = 'bg-secondary';
+                let icon = 'bi-info-circle';
+                
+                const accion = (a.accion || '').toUpperCase();
+                if(accion.includes('CREAR') || accion.includes('ADD') || accion.includes('APERTURA')) { badgeColor = 'bg-success'; icon='bi-plus-circle'; }
+                if(accion.includes('BORRAR') || accion.includes('DEL') || accion.includes('ELIMINAR')) { badgeColor = 'bg-danger'; icon='bi-trash'; }
+                if(accion.includes('EDITAR') || accion.includes('MODIFICAR')) { badgeColor = 'bg-warning text-dark'; icon='bi-pencil'; }
+                if(accion.includes('CIERRE')) { badgeColor = 'bg-dark'; icon='bi-lock-fill'; }
+                if(accion.includes('VENTA') || accion.includes('LIQUIDACION')) { badgeColor = 'bg-primary'; icon='bi-cash'; }
+
+                const fechaFmt = new Date(a.fecha).toLocaleString('es-MX', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+
+                return `
+                <tr>
+                    <td class="text-center"><small class="text-muted">${fechaFmt}</small></td>
+                    <td>
+                        <div class="fw-bold text-dark">${a.usuario_nombre || 'Desconocido'}</div>
+                        <small class="text-muted" style="font-size:10px;">${a.sucursal_nombre || 'Sucursal ?'}</small>
+                    </td>
+                    <td><span class="badge ${badgeColor}">${a.modulo}</span></td>
+                    <td>
+                        <div class="fw-bold small"><i class="bi ${icon}"></i> ${a.accion}</div>
+                    </td>
+                    <td class="small text-muted" style="max-width: 250px; white-space: normal;">
+                        ${a.detalles || ''}
+                    </td>
+                </tr>`;
+            }).join(''); 
+        } catch(e) { console.error(e); } 
+    };   
+    window.saveLocalPrint = function() { localStorage.setItem('pc', JSON.stringify({ f: getEl('local-font').value, w: getEl('conf-ancho').value })); };
    
    // --- CARGA DE REPORTE Y PDF (CORREGIDOS Y RESTAURADOS) ---
     window.loadReport360 = async function() { 
@@ -718,30 +1478,136 @@
             // Actualizamos los KPIs superiores
             safeText('kpi-ingresos', money(d.balance.ingresos_totales)); 
             safeText('kpi-gastos', money(d.balance.egresos_totales)); 
-            safeText('kpi-caja', money(d.balance.caja_teorica)); 
+            safeText('kpi-caja', money(d.balance.utilidad)); // OJO: Corregí esto para que muestre la Utilidad real (Ingresos - Gastos)
             
-            // --- AQUÍ ESTÁ LA ACTUALIZACIÓN DE LA TABLA (7 COLUMNAS) ---
+            // --- TABLA DE MOVIMIENTOS ---
             getEl('tbl-reporte-360').innerHTML = d.movimientos.ingresos.map(o => {
-                // 1. Formatear la fecha (quitar la hora)
+                // 1. Formatear la fecha
                 const fechaFmt = o.fecha ? o.fecha.split('T')[0] : '--';
                 
-                // 2. Lógica visual para la deuda (Rojo si debe, Verde si pagó)
-                const deuda = parseFloat(o.deuda_actual || 0);
-                const deudaHtml = deuda > 0.5 
-                    ? `<span class="text-danger fw-bold">${money(deuda)}</span>` 
-                    : `<span class="text-success small fw-bold">PAGADO</span>`;
+                let claseFila = "";
+                let textoEstado = "";
+                let folioHtml = o.folio;
 
-                // 3. Renderizar las 7 celdas alineadas con tu encabezado HTML
-                return `<tr>
-                    <td><small>${fechaFmt}</small></td>                    <td class="fw-bold">${o.folio}</td>                     <td>${o.cliente}</td>                                   <td><span class="badge bg-light text-dark border">${o.metodo_pago}</span></td> <td class="text-end text-muted">${money(o.total_orden || 0)}</td> <td class="text-end fw-bold text-primary">${money(o.abono)}</td>  <td class="text-end">${deudaHtml}</td>                  </tr>`;
+                // 2. Lógica para CANCELADAS y Deudas
+                if (o.estatus === 'cancelada') {
+                    claseFila = "table-danger text-danger text-decoration-line-through";
+                    textoEstado = "<span class='badge bg-danger'>CANCELADA</span>";
+                    folioHtml = `${o.folio} (X)`;
+                } else {
+                    const deuda = parseFloat(o.deuda_actual || 0);
+                    textoEstado = deuda > 0.5 
+                        ? `<span class="text-danger fw-bold">${money(deuda)}</span>` 
+                        : `<span class="text-success small fw-bold">PAGADO</span>`;
+                }
+
+                // 3. Renderizar fila
+                return `<tr class="${claseFila}">
+                    <td><small>${fechaFmt}</small></td>
+                    <td class="fw-bold">${folioHtml}</td>
+                    <td>${o.cliente}</td>
+                    <td><span class="badge bg-light text-dark border">${o.metodo_pago}</span></td>
+                    <td class="text-end text-muted">${money(o.total_orden || 0)}</td>
+                    <td class="text-end fw-bold text-primary">${money(o.abono)}</td>
+                    <td class="text-end">${textoEstado}</td>
+                </tr>`;
             }).join(''); 
-            // ------------------------------------------------------------
-
+            
         } catch (e) { console.error("Error reporte:", e); } 
     };
    
-   async function loadHistorial() { const ini = getEl('h-ini').value; const fin = getEl('h-fin').value; const r = await fetch(`/api/ordenes/listado?sucursal_id=${sucursalID}`); const d = await r.json(); const f = d.filter(o => o.fecha_creacion.split('T')[0] >= ini); getEl('tblHistorial').innerHTML = f.map(o => `<tr><td>${o.folio}</td><td>${o.cliente}</td><td>${money(o.total)}</td><td>${o.estatus}</td><td class="text-end"><button class="btn btn-sm btn-primary" onclick="window.verDetalles(${o.id}, '${o.folio}')">Ver</button></td></tr>`).join(''); }
-   window.loadInv = async function() { try { const r = await fetch(`/api/gestion/inventario?sucursal_id=${sucursalID}`); cat = await r.json(); window.filt(); const tbl = document.getElementById('tblInv'); if(tbl) tbl.innerHTML = cat.map(p => `<tr><td>${p.nombre}</td><td>${p.tipo}</td><td>$${p.precio}</td><td>${p.stock}</td><td class="text-end"><button class="btn btn-sm btn-primary" onclick="window.modalProd(${p.id})">✏️</button><button class="btn btn-sm btn-outline-danger" onclick="window.delProd(${p.id})">🗑️</button></td></tr>`).join(''); } catch(e) {} };
+    // --- HISTORIAL CON FILTRO ANTI-DUPLICADOS ---
+   // --- HISTORIAL MEJORADO (CON HORA REAL DE ENTREGA) ---
+    // --- PEGAR EN public/app.js ---
+    window.loadHistorial = async function() { 
+        const ini = getEl('h-ini').value; 
+        const fin = getEl('h-fin').value; 
+        
+        // 1. Obtener datos
+        const r = await fetch(`/api/ordenes/listado?sucursal_id=${sucursalID}`); 
+        const d = await r.json(); 
+        
+        // 2. Filtro de fechas
+        let filtrados = d.filter(o => o.fecha_creacion.split('T')[0] >= ini); 
+        if(fin) filtrados = filtrados.filter(o => o.fecha_creacion.split('T')[0] <= fin);
+        
+        // 3. FILTRO ANTI-DUPLICADOS (El que ya teníamos)
+        const ordenesUnicas = {};
+        filtrados.forEach(o => {
+            if (!ordenesUnicas[o.folio] || o.id > ordenesUnicas[o.folio].id) {
+                ordenesUnicas[o.folio] = o;
+            }
+        });
+        const listaFinal = Object.values(ordenesUnicas).sort((a, b) => b.id - a.id);
+
+        // 4. Renderizar
+        getEl('tblHistorial').innerHTML = listaFinal.map(o => {
+            
+            let infoEntrega = '';
+            
+            // LÓGICA DE FECHAS CLAVE:
+            
+            // CASO A: YA SE ENTREGÓ (Mostrar hora real de cámaras)
+            if(o.estatus === 'entregado' && o.fecha_real_entrega) {
+                const fReal = new Date(o.fecha_real_entrega);
+                // Si la hora sale mal (UTC), descomenta la siguiente línea:
+                // fReal.setHours(fReal.getHours() - 6); 
+
+                const dia = fReal.toLocaleDateString('es-MX', {day:'numeric', month:'short'});
+                const hora = fReal.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+                
+                infoEntrega = `<div class="text-success small fw-bold">
+                                <i class="bi bi-check-circle-fill"></i> Entregado:<br>
+                                ${dia} - ${hora}
+                            </div>`;
+            } 
+            // CASO B: AÚN NO SE ENTREGA (Mostrar promesa del ticket)
+            else if (o.fecha_entrega) {
+                const fPromesa = new Date(o.fecha_entrega);
+                fPromesa.setHours(fPromesa.getHours() + 12); 
+                const dia = fPromesa.toLocaleDateString('es-MX', {day:'numeric', month:'short'});
+                const hora = o.horario_entrega ? `<br><span class="text-muted" style="font-size:0.8em">${o.horario_entrega}</span>` : '';
+                
+                infoEntrega = `<div class="text-primary small fw-bold">
+                                Promesa:<br>${dia} ${hora}
+                                </div>`;
+            } else {
+                infoEntrega = '<span class="text-muted small">--</span>';
+            }
+
+            // Colores de estatus
+            let estatusColor = 'text-dark';
+            if(o.estatus === 'pendiente') estatusColor = 'text-danger fw-bold';
+            if(o.estatus === 'lavando') estatusColor = 'text-primary fw-bold';
+            if(o.estatus === 'listo') estatusColor = 'text-success fw-bold';
+            if(o.estatus === 'entregado') estatusColor = 'text-muted';
+            if(o.estatus === 'cancelada') estatusColor = 'text-decoration-line-through text-danger';
+
+            return `<tr>
+                <td class="fw-bold">${o.folio}</td>
+                <td>
+                    <div class="small text-muted">Recibido: ${o.fecha_creacion.split('T')[0]}</div>
+                </td>
+                <td>${infoEntrega}</td>
+                <td>
+                    <div class="fw-bold text-truncate" style="max-width: 150px;">${o.cliente}</div>
+                </td>
+                <td class="text-end fw-bold">${money(o.total)}</td>
+                <td class="text-center">
+                    ${o.saldo > 0.5 
+                        ? `<span class="badge bg-danger">DEBE ${money(o.saldo)}</span>` 
+                        : '<span class="badge bg-success">PAGADO</span>'}
+                </td>
+                <td class="${estatusColor} text-uppercase small">${o.estatus}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" onclick="window.verDetalles(${o.id}, '${o.folio}')">
+                        Ver
+                    </button>
+                </td>
+            </tr>`;
+        }).join(''); 
+    };
+    window.loadInv = async function() { try { const r = await fetch(`/api/gestion/inventario?sucursal_id=${sucursalID}`); cat = await r.json(); window.filt(); const tbl = document.getElementById('tblInv'); if(tbl) tbl.innerHTML = cat.map(p => `<tr><td>${p.nombre}</td><td>${p.tipo}</td><td>$${p.precio}</td><td>${p.stock}</td><td class="text-end"><button class="btn btn-sm btn-primary" onclick="window.modalProd(${p.id})">✏️</button><button class="btn btn-sm btn-outline-danger" onclick="window.delProd(${p.id})">🗑️</button></td></tr>`).join(''); } catch(e) {} };
    async function gasto() { const {value:v}=await Swal.fire({title:'Gasto', html:'<input id="d" class="swal2-input" placeholder="Desc"><input id="m" type="number" class="swal2-input" placeholder="$">', preConfirm:()=>[getEl('d').value, getEl('m').value]}); if(v) await fetch('/api/finanzas/gasto',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({descripcion:v[0], monto:v[1], sucursal_id:sucursalID, usuario_id:usuario.id})}); }
    window.exportContadoraPDF = async function() {
     try {
@@ -821,100 +1687,263 @@
         Swal.fire('Error', 'No se pudo generar el PDF. Revisa la consola.', 'error');
     } 
 };
-   // --- PDF PROFESIONAL RESTAURADO ---
-   window.exportSmartPDF = async function() { 
-       if(!reportData.list_ing || reportData.list_ing.length === 0) return Swal.fire('Info', 'No hay datos cargados', 'info');
-       
-       const { jsPDF } = window.jspdf; 
-       const doc = new jsPDF('l'); 
-       
-       const colPrimario = [26, 29, 33]; 
-       const colAcento = [59, 130, 246]; 
-       const colFondo = [245, 247, 250]; 
-       
-       doc.setFillColor(...colPrimario); 
-       doc.rect(0, 0, 297, 35, 'F'); 
-       doc.setTextColor(255, 255, 255); 
-       doc.setFontSize(24); doc.setFont("helvetica", "bold"); 
-       doc.text("REPORTE FINANCIERO", 14, 20); 
-       
-       doc.setFontSize(10); doc.setFont("helvetica", "normal"); 
-       doc.text(`Generado: ${new Date().toLocaleString()}`, 280, 15, { align: 'right' }); 
-       doc.text(`Periodo: ${reportData.fechas.inicio} al ${reportData.fechas.fin}`, 280, 25, { align: 'right' }); 
-       
-       let yStart = 45; 
-       
-       // KPIs Visuales
-       doc.setDrawColor(200); doc.setFillColor(255, 255, 255); doc.roundedRect(14, yStart, 130, 35, 3, 3, 'FD'); 
-       doc.setTextColor(100); doc.setFontSize(10); doc.text("TOTAL INGRESOS", 20, yStart + 10); 
-       doc.setTextColor(...colAcento); doc.setFontSize(16); doc.setFont("helvetica", "bold"); 
-       doc.text(money(reportData.balance.ingresos_totales), 20, yStart + 22); 
-       
-       doc.setTextColor(100); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("GASTOS", 70, yStart + 10); 
-       doc.setTextColor(220, 53, 69); doc.setFontSize(16); doc.setFont("helvetica", "bold"); 
-       doc.text(money(reportData.balance.egresos_totales), 70, yStart + 22); 
-       
-       doc.setTextColor(100); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("UTILIDAD", 115, yStart + 10); 
-       doc.setTextColor(25, 135, 84); doc.setFontSize(16); doc.setFont("helvetica", "bold"); 
-       doc.text(money(reportData.balance.utilidad), 115, yStart + 22); 
-       
-       // Desglose
-       doc.setDrawColor(200); doc.setFillColor(255, 255, 255); doc.roundedRect(150, yStart, 133, 35, 3, 3, 'FD'); 
-       const desglose = reportData.balance.desglose || { efectivo: 0, tarjeta: 0, transferencia: 0 }; 
-       
-       doc.setTextColor(100); doc.setFontSize(9); doc.setFont("helvetica", "normal"); 
-       doc.text("EFECTIVO", 155, yStart + 10); 
-       doc.setTextColor(50); doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
-       doc.text(money(desglose.efectivo), 155, yStart + 20); 
-       
-       doc.setTextColor(100); doc.setFontSize(9); doc.setFont("helvetica", "normal"); 
-       doc.text("TARJETA", 195, yStart + 10); 
-       doc.setTextColor(50); doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
-       doc.text(money(desglose.tarjeta), 195, yStart + 20); 
-       
-       doc.setTextColor(100); doc.setFontSize(9); doc.setFont("helvetica", "normal"); 
-       doc.text("TRANSF.", 235, yStart + 10); 
-       doc.setTextColor(50); doc.setFontSize(12); doc.setFont("helvetica", "bold"); 
-       doc.text(money(desglose.transferencia), 235, yStart + 20); 
-       
-       doc.autoTable({ 
-           startY: yStart + 45, 
-           head: [['Fecha', 'Folio', 'Cliente', 'Método', 'Total Nota', 'Abonado', 'Estado']], 
-           body: reportData.list_ing.map(o => [
-               o.fecha ? o.fecha.split('T')[0] : 'Hoy', 
-               o.folio, 
-               o.cliente, 
-               o.metodo_pago, 
-               `$${parseFloat(o.total_orden||o.monto).toFixed(2)}`, 
-               `$${parseFloat(o.abono||o.monto).toFixed(2)}`, 
-               (parseFloat(o.deuda_actual||0) > 1) ? `DEBE $${parseFloat(o.deuda_actual).toFixed(2)}` : 'PAGADO'
-           ]), 
-           theme: 'striped', 
-           headStyles: { fillColor: colPrimario, textColor: 255, fontStyle: 'bold' }, 
-           styles: { fontSize: 9, cellPadding: 3 }, 
-           alternateRowStyles: { fillColor: colFondo } 
-       }); 
-       
-       doc.save(`Reporte_Financiero_${reportData.fechas.inicio}.pdf`); 
-   };
+    // --- PDF PROFESIONAL RESTAURADO ---
+    // --- PEGAR EN public/app.js (Reemplazando window.exportSmartPDF) ---
+
+    window.exportSmartPDF = async function() {
+        if (!window.jspdf) return Swal.fire('Error', 'Librería PDF no cargada', 'error');
+        const { jsPDF } = window.jspdf;
+        
+        const ini = getEl('rep-ini').value;
+        const fin = getEl('rep-fin').value;
+        if(!ini || !fin) return Swal.showValidationMessage('Selecciona fechas');
+
+        // 1. OBTENER DATOS
+        const r = await fetch(`/api/ordenes/reporte-completo?sucursal_id=${sucursalID}&inicio=${ini}&fin=${fin}`);
+        const data = await r.json();
+
+        // 2. PREPARAR DOCUMENTO
+        const doc = new jsPDF();
+        const width = doc.internal.pageSize.getWidth(); 
+
+        // ENCABEZADO
+        doc.setFillColor(26, 29, 33);
+        doc.rect(0, 0, width, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22); doc.setFont("helvetica", "bold");
+        doc.text("REPORTE FINANCIERO", 14, 20);
+        doc.setFontSize(10); doc.setFont("helvetica", "normal");
+        doc.text(`Generado: ${new Date().toLocaleString()}`, width - 14, 15, { align: 'right' });
+        doc.text(`Periodo: ${ini} al ${fin}`, width - 14, 25, { align: 'right' });
+
+        // TARJETAS DE TOTALES
+        const startY = 50;
+        
+        // Tarjeta Financiera
+        doc.setDrawColor(200, 200, 200); doc.setFillColor(255, 255, 255);
+        doc.roundedRect(14, startY, 88, 30, 3, 3, 'FD');
+        doc.setFontSize(8); doc.setTextColor(100);
+        doc.text('TOTAL INGRESOS', 24, startY + 10);
+        doc.text('GASTOS (Aplicados)', 54, startY + 10); // Aclaración visual
+        doc.text('UTILIDAD', 84, startY + 10);
+
+        doc.setFontSize(11); doc.setFont("helvetica", "bold");
+        doc.setTextColor(59, 130, 246); doc.text(money(data.balance.ingresos_totales), 24, startY + 20);
+        doc.setTextColor(220, 53, 69); doc.text(money(data.balance.egresos_totales), 54, startY + 20);
+        doc.setTextColor(25, 135, 84); doc.text(money(data.balance.utilidad), 84, startY + 20);
+
+        // Tarjeta Métodos
+        doc.setDrawColor(200, 200, 200); doc.setFillColor(255, 255, 255);
+        doc.roundedRect(108, startY, 88, 30, 3, 3, 'FD'); 
+        doc.setFontSize(8); doc.setTextColor(100);
+        doc.text("EFECTIVO", 125, startY + 10);
+        doc.text("TARJETA", 165, startY + 10);
+        doc.setFontSize(11); doc.setFont("helvetica", "bold");
+        doc.setTextColor(0, 0, 0); 
+        doc.text(money(data.balance.desglose.efectivo), 125, startY + 20);
+        doc.text(money(data.balance.desglose.tarjeta), 165, startY + 20);
+
+        // --- PROCESAMIENTO DE FILAS ---
+        let filas = [];
+        
+        // A) Ingresos
+        if (data.movimientos && data.movimientos.ingresos) {
+            data.movimientos.ingresos.forEach(i => {
+                const abono = parseFloat(i.abono);
+                const total = parseFloat(i.total_orden);
+                let conceptoSmart = i.cliente.substring(0, 20); 
+                let tipoFila = 'ingreso';
+                let estadoTexto = (i.deuda_actual > 0) ? `RESTA $${i.deuda_actual}` : 'LIQUIDADO';
+
+                if (i.estatus === 'cancelada') {
+                    conceptoSmart = `[CANCELADA] ${i.cliente.substring(0, 15)}`;
+                    tipoFila = 'cancelada';
+                    estadoTexto = 'CANCELADO';
+                } else if (abono === 0) {
+                    conceptoSmart = `ENTREGA: ${i.cliente.substring(0, 15)}`;
+                    tipoFila = 'entrega';
+                } else if (abono >= total) {
+                    conceptoSmart = `PAGO ÚNICO: ${i.cliente.substring(0, 15)}`;
+                } else {
+                    conceptoSmart = `ABONO: ${i.cliente.substring(0, 15)}`;
+                }
+
+                filas.push({
+                    fecha: i.fecha, folio: i.folio, cliente: conceptoSmart,
+                    metodo: i.metodo_pago || 'Otro', total: total, abono: abono, 
+                    estado: estadoTexto, tipo: tipoFila
+                });
+            });
+        }
+
+        // B) Gastos (AQUÍ ESTÁ LA CORRECCIÓN)
+        if (data.movimientos && data.movimientos.egresos) {
+            data.movimientos.egresos.forEach(g => {
+                
+                // Verificamos si está cancelado
+                const esCancelado = (g.estatus === 'cancelado');
+                
+                filas.push({
+                    fecha: g.fecha, 
+                    folio: 'GASTO', 
+                    cliente: esCancelado ? `[CANCELADO] ${g.descripcion}` : (g.descripcion || 'Gasto'),
+                    metodo: g.metodo_pago || 'Efectivo', 
+                    total: parseFloat(g.monto),
+                    abono: parseFloat(g.monto), 
+                    estado: esCancelado ? 'CANCELADO' : 'APLICADO', 
+                    tipo: esCancelado ? 'gasto-cancelado' : 'gasto' // Nuevo tipo para pintar rojo
+                });
+            });
+        }
+
+        filas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        // GENERAR TABLA
+        doc.autoTable({
+            startY: 90,
+            head: [['Fecha', 'Folio', 'Concepto / Cliente', 'Método', 'Total Nota', 'Monto', 'Estado']],
+            body: filas.map(f => [
+                f.fecha.substring(0, 10), f.folio, f.cliente,
+                f.tipo === 'entrega' ? '--' : f.metodo.toUpperCase(), 
+                money(f.total), money(f.abono), f.estado
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [26, 29, 33], textColor: [255, 255, 255], fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 3, valign: 'middle' }, 
+            columnStyles: { 
+                4: { halign: 'right', textColor: [150, 150, 150] }, 
+                5: { halign: 'right', fontStyle: 'bold' } 
+            },
+            didParseCell: function (data) {
+                if (data.section === 'body') {
+                    const row = filas[data.row.index];
+
+                    // 1. GASTOS ACTIVOS (ROJO)
+                    if (row.tipo === 'gasto') {
+                        data.cell.styles.textColor = [220, 53, 69]; 
+                    } 
+                    // 2. GASTOS CANCELADOS O VENTAS CANCELADAS (ROJO TACHADO/ITÁLICA)
+                    else if (row.tipo === 'cancelada' || row.tipo === 'gasto-cancelado') {
+                        data.cell.styles.textColor = [220, 53, 69]; 
+                        data.cell.styles.fontStyle = 'italic';
+                        // Nota: Si usas jspdf-autotable reciente, puedes intentar 'line-through'
+                    }
+                    // 3. ENTREGAS
+                    else if (row.tipo === 'entrega') {
+                        data.cell.styles.textColor = [160, 160, 160];
+                        data.cell.styles.fontStyle = 'italic'; 
+                    }
+                    // 4. INGRESOS
+                    else {
+                        if (data.column.index === 3) {
+                            const m = row.metodo.toLowerCase();
+                            if (m.includes('efectivo')) data.cell.styles.textColor = [25, 135, 84]; 
+                            if (m.includes('tarjeta')) data.cell.styles.textColor = [13, 110, 253]; 
+                        }
+                        if (data.column.index === 5) data.cell.styles.textColor = [0, 0, 0]; 
+                        if (data.column.index === 6) {
+                            if (row.estado === 'LIQUIDADO') data.cell.styles.textColor = [25, 135, 84];
+                            else data.cell.styles.textColor = [220, 53, 69];
+                        }
+                    }
+                }
+            }
+        });
+
+        doc.save(`Reporte_Financiero_${ini}.pdf`);
+    };
+
+    // --- PEGAR AL FINAL DE public/app.js (Antes del bloque de Inicialización) ---
+
+    // 1. FUNCIÓN PRINCIPAL DE BÚSQUEDA
+    window.buscarOrden = async function() {
+        const input = getEl('inputBusquedaFolio');
+        if(!input) return;
+        const folio = input.value.trim().toUpperCase();
+        const resultDiv = getEl('search-result');
+
+        if (folio.length < 3) return Swal.fire('Error', 'Escribe un folio válido (Ej. PB-001)', 'warning');
+
+        Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
+
+        try {
+            const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
+            if (!r.ok) throw new Error("No encontrado");
+            const data = await r.json();
+            
+            Swal.close();
+
+            if (!data || !data.orden) {
+                resultDiv.style.display = 'none';
+                return Swal.fire('No encontrado', 'Datos vacíos.', 'error');
+            }
+
+            const o = data.orden;
+            const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
+
+            // Llenar datos
+            safeText('res-folio', o.folio);
+            safeText('res-cliente', o.cliente_nombre);
+            safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
+            safeText('res-total', money(o.total));
+            safeText('res-pagado', money(o.monto_pagado));
+            
+            const elSaldo = getEl('res-saldo');
+            if(elSaldo) {
+                elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
+                elSaldo.className = saldo > 0.5 ? 'text-danger' : 'text-success';
+            }
+
+            getEl('res-items').innerHTML = data.items.map(i => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div><span class="fw-bold">${i.cantidad}x ${i.servicio}</span>${i.notas ? `<br><small class="text-muted">${i.notas}</small>` : ''}</div>
+                    <span class="fw-bold">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</span>
+                </li>`).join('');
+
+            getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
+                <div class="d-flex justify-content-between small border-bottom py-1">
+                    <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
+                    <span class="fw-bold text-success">${money(p.monto)}</span>
+                </div>`).join('') : '<small class="text-muted">Sin pagos registrados</small>';
+
+            updateTimeline(o.estatus);
+
+            const divEnt = getEl('res-delivery-info');
+            if(divEnt) {
+                if (o.estatus === 'entregado') {
+                    divEnt.style.display = 'block';
+                    safeText('res-entregador', data.delivery_info.entregado_por || 'Staff');
+                    if(o.fecha_real_entrega) safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
+                } else { divEnt.style.display = 'none'; }
+            }
+
+            resultDiv.style.display = 'block';
+            input.value = ''; 
+
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'No se encontró la orden o hubo un error.', 'error');
+        }
+    };
+
+    window.updateTimeline = function(estatus) {
+        const bar = getEl('res-bar');
+        const stText = getEl('res-status-text');
+        if(!bar) return;
+        
+        ['lav','lis','ent'].forEach(k => { const ic=getEl('icon-'+k); if(ic) ic.className = 'bi bi-circle text-muted'; });
+
+        let w = '0%'; let color = 'bg-secondary'; let texto = 'PENDIENTE';
+
+        if (estatus === 'pendiente') { w = '15%'; color = 'alert-secondary'; } 
+        else if (estatus === 'lavando') { w = '50%'; color = 'alert-info'; texto = 'LAVANDO'; if(getEl('icon-lav')) getEl('icon-lav').className = 'bi bi-water text-info'; } 
+        else if (estatus === 'listo') { w = '75%'; color = 'alert-success'; texto = 'LISTO'; if(getEl('icon-lav')) getEl('icon-lav').className='bi bi-check-circle-fill text-success'; if(getEl('icon-lis')) getEl('icon-lis').className='bi bi-check-circle-fill text-success'; } 
+        else if (estatus === 'entregado') { w = '100%'; color = 'alert-dark bg-dark text-white'; texto = 'ENTREGADO'; if(getEl('icon-lav')) getEl('icon-lav').className='bi bi-check-circle-fill text-success'; if(getEl('icon-lis')) getEl('icon-lis').className='bi bi-check-circle-fill text-success'; if(getEl('icon-ent')) getEl('icon-ent').className='bi bi-box-seam-fill text-dark'; } 
+        else if (estatus === 'cancelada') { w = '100%'; color = 'alert-danger'; texto = 'CANCELADA'; bar.className = 'progress-bar bg-danger'; }
+
+        bar.style.width = w; stText.className = `alert ${color} fw-bold border mt-3 mb-0 text-center`; stText.innerText = texto;
+    };
    
-   // ARQUEOS Y TURNOS
-   window.checkTurno = async function() { 
-       try {
-           const r = await fetch(`/api/gestion/turno/activo?sucursal_id=${sucursalID}&usuario_id=${usuario.id}`); 
-           const d = await r.json(); 
-           const el = getEl('turnoStatus'); 
-           if (d && d.id) { 
-               el.className = 'p-2 rounded-2 bg-success text-white text-center small fw-bold pointer'; 
-               el.innerText = '🟢 ABIERTO'; 
-               el.onclick = () => window.nav('rep360'); 
-           } else { 
-               el.className = 'p-2 rounded-2 bg-danger text-white text-center small fw-bold pointer'; 
-               el.innerText = '🔴 CERRADO'; 
-               el.onclick = () => window.gestionarTurno(); 
-           }
-       } catch(e) {}
-   };
    window.gestionarTurno = async function() { 
        const { value: f } = await Swal.fire({ title: 'Apertura', input: 'number', inputValue: 500 }); 
        if (f) { await fetch('/api/gestion/turno/abrir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sucursal_id: sucursalID, usuario_id: usuario.id, fondo: f }) }); window.checkTurno(); } 
@@ -994,6 +2023,219 @@
            }).join(''); 
        } catch(e) { c.innerHTML = '<div class="text-center text-danger p-5">Error cargando ruta</div>'; } 
    };
+
+    // 1. MODAL NUEVO GASTO MEJORADO
+    window.nuevoGastoModal = async function() {
+        const { value: formValues } = await Swal.fire({
+            title: 'Registrar Salida de Dinero',
+            html: `
+                <div class="text-start">
+                    <label class="small fw-bold">Monto ($)</label>
+                    <input id="sw-monto" type="number" class="form-control mb-2" placeholder="0.00">
+                    
+                    <label class="small fw-bold">Concepto / Descripción</label>
+                    <input id="sw-desc" class="form-control mb-2" placeholder="Ej. Jabón, Luz, Sueldo...">
+                    
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small fw-bold">Proveedor (Opcional)</label>
+                            <input id="sw-prov" class="form-control" placeholder="Ej. Costco">
+                        </div>
+                        <div class="col-6">
+                            <label class="small fw-bold">Categoría</label>
+                            <select id="sw-cat" class="form-select">
+                                <option value="Insumos">Insumos (Jabón, etc)</option>
+                                <option value="Servicios">Servicios (Luz, Agua)</option>
+                                <option value="Mantenimiento">Mantenimiento</option>
+                                <option value="Nomina">Nómina / Sueldos</option>
+                                <option value="Renta">Renta</option>
+                                <option value="Otros">Otros</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch p-3 bg-light rounded border">
+                        <input class="form-check-input" type="checkbox" id="sw-factura">
+                        <label class="form-check-label fw-bold" for="sw-factura">✅ ¿Tiene Factura?</label>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Registrar Gasto',
+            preConfirm: () => {
+                const monto = getEl('sw-monto').value;
+                const desc = getEl('sw-desc').value;
+                if (!monto || !desc) Swal.showValidationMessage('Monto y Concepto son obligatorios');
+                return {
+                    monto: parseFloat(monto),
+                    descripcion: desc,
+                    proveedor: getEl('sw-prov').value,
+                    categoria: getEl('sw-cat').value,
+                    tiene_factura: getEl('sw-factura').checked,
+                    sucursal_id: sucursalID,
+                    usuario_id: usuario ? usuario.id : 1
+                };
+            }
+        });
+
+        if (formValues) {
+            const r = await fetch('/api/finanzas/gasto', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(formValues)
+            });
+            if(r.ok) {
+                Swal.fire('Guardado', 'Gasto registrado correctamente', 'success');
+                window.loadGastosView(); // Recargar tabla si estamos ahí
+            }
+        }
+    };
+
+    // 2. CARGAR VISTA DE GASTOS
+    window.loadGastosView = async function() {
+        let ini = getEl('gasto-ini').value;
+        let fin = getEl('gasto-fin').value;
+        
+        // Fechas por defecto (Mes actual)
+        if(!ini) { 
+            const d = new Date(); 
+            ini = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10); 
+            fin = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0,10);
+            getEl('gasto-ini').value = ini; 
+            getEl('gasto-fin').value = fin;
+        }
+
+        const r = await fetch(`/api/finanzas/reporte-gastos?sucursal_id=${sucursalID}&inicio=${ini}&fin=${fin}`);
+        const data = await r.json();
+
+        // Actualizar Totales
+        safeText('gasto-total', money(data.totales.total));
+        safeText('gasto-factura', money(data.totales.deducible));
+        safeText('gasto-sin', money(data.totales.no_deducible));
+
+        // Llenar Tabla
+        const tbl = getEl('tblGastos');
+        if(data.gastos.length === 0) {
+            tbl.innerHTML = '<tr><td colspan="7" class="text-center p-4">No hay gastos en este periodo</td></tr>';
+            return;
+        }
+
+       
+        tbl.innerHTML = data.gastos.map(g => {
+            
+            let filaClass = "";
+            let montoHtml = `<span class="fw-bold text-danger">-${money(g.monto)}</span>`;
+            let btnBorrar = `<button class="btn btn-sm btn-outline-danger" onclick="window.borrarGasto(${g.id})"><i class="bi bi-trash"></i></button>`;
+            let estadoIcon = g.tiene_factura ? '<span class="text-success fs-5">✅</span>' : '<span class="text-muted opacity-25">❌</span>';
+
+            // SI ESTÁ CANCELADO
+            if (g.estatus === 'cancelado') {
+                filaClass = "table-danger text-muted text-decoration-line-through"; // Rojo tachado
+                montoHtml = `<span class="fw-bold text-muted">${money(g.monto)}</span>`; // Monto gris
+                btnBorrar = `<span class="badge bg-danger">CANCELADO</span>`; // Sin botón
+                estadoIcon = ''; // Sin icono de factura
+            }
+
+            return `
+            <tr class="${filaClass}">
+                <td><small>${g.fecha.substring(0,10)}</small></td>
+                <td class="fw-bold">${g.descripcion}</td>
+                <td>${g.proveedor || '--'}</td>
+                <td><span class="badge bg-secondary">${g.categoria}</span></td>
+                <td class="text-center">${estadoIcon}</td>
+                <td class="text-end">${montoHtml}</td>
+                <td class="text-end">${btnBorrar}</td>
+            </tr>`;
+        }).join('');
+        
+        // Guardamos datos para el PDF
+        window.gastosDataTemp = data;
+    };
+
+    // 3. GENERAR PDF DE GASTOS
+    window.printGastosPDF = function() {
+        // 1. Validación de datos
+        if(!window.gastosDataTemp || !window.gastosDataTemp.gastos) return Swal.fire('Error', 'No hay datos cargados', 'warning');
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const data = window.gastosDataTemp;
+        
+        // 2. Encabezado Rojo (Distingue que es Reporte de Salidas)
+        doc.setFillColor(220, 53, 69); // Rojo corporativo
+        doc.rect(0, 0, 210, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20); doc.text("REPORTE DE GASTOS", 14, 20);
+        
+        // Fechas
+        doc.setFontSize(10); 
+        doc.text(`${getEl('gasto-ini').value} al ${getEl('gasto-fin').value}`, 200, 20, { align: 'right' });
+    
+        // 3. Tabla de Totales (Resumen)
+        doc.setTextColor(0,0,0);
+        doc.text(`Total Gastado: ${money(data.totales.total)}`, 14, 40);
+        doc.text(`Deducible (Con Factura): ${money(data.totales.deducible)}`, 14, 46);
+        
+        // 4. Preparar filas (Detectando cancelados)
+        const filas = data.gastos.map(g => {
+            // Si está cancelado, modificamos el texto del concepto
+            const descripcionFinal = (g.estatus === 'cancelado') 
+                ? `[CANCELADO] ${g.descripcion}` 
+                : g.descripcion;
+    
+            return [
+                g.fecha.substring(0,10),
+                descripcionFinal,
+                g.proveedor,
+                g.categoria,
+                g.tiene_factura ? 'SI' : 'NO',
+                money(g.monto)
+            ];
+        });
+    
+        // 5. Generar Tabla con estilos condicionales
+        doc.autoTable({
+            startY: 55,
+            head: [['Fecha', 'Concepto', 'Proveedor', 'Categoría', 'Factura', 'Monto']],
+            body: filas,
+            theme: 'grid',
+            headStyles: { fillColor: [50, 50, 50] }, // Encabezado Gris Oscuro
+            didParseCell: function(data) {
+                if (data.section === 'body') {
+                    const rowData = data.row.raw; // Acceso a los datos crudos de la fila
+                    const concepto = rowData[1];  // La columna 1 es la descripción
+    
+                    // CASO A: GASTO CANCELADO (Prioridad Alta)
+                    // Verificamos si el texto empieza con [CANCELADO]
+                    if (concepto.toString().startsWith('[CANCELADO]')) {
+                        data.cell.styles.textColor = [220, 53, 69]; // Rojo
+                        data.cell.styles.fontStyle = 'italic';      // Letra inclinada
+                        // (Opcional) data.cell.styles.decoration = 'line-through'; // Tachado (si la versión de jspdf lo soporta)
+                    }
+                    // CASO B: TIENE FACTURA (Verde) - Solo si no es cancelado
+                    else if (data.column.index === 4 && data.cell.raw === 'SI') {
+                        data.cell.styles.textColor = [25, 135, 84]; // Verde
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            }
+        });
+    
+        doc.save('Gastos_Detallados.pdf');
+    };
+
+    window.borrarGasto = async function(id) {
+        const { isConfirmed } = await Swal.fire({ title:'¿Cancelar Gasto?', text:'Quedará registrado como cancelado.', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, cancelar' });
+        if(isConfirmed) {
+            await fetch('/api/finanzas/gasto/borrar', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({ id, usuario_id: usuario.id }) // <-- Enviamos usuario
+            });
+            window.loadGastosView();
+            window.loadAuditoria(); // Actualizar logs si se ven
+        }
+    };
    
    /* =========================================
       9. INICIALIZACIÓN (AL FINAL)
