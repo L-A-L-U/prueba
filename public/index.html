@@ -176,76 +176,61 @@
                     
                     <div class="input-group input-group-lg shadow-sm mb-5">
                         <span class="input-group-text bg-white border-0 ps-3"><i class="bi bi-qr-code-scan"></i></span>
-                        <input type="text" id="inputBusquedaFolio" class="form-control border-0 fw-bold text-center text-uppercase" placeholder="EJ. PB-00123" onkeypress="if(event.key==='Enter') window.buscarOrden()">
+                        <input type="text" id="inputBusquedaFolio" class="form-control border-0 fw-bold text-center text-uppercase" placeholder="Folio o Nombre" onkeypress="if(event.key==='Enter') window.buscarOrden()">
                         <button class="btn btn-primary px-4 fw-bold" onclick="window.buscarOrden()">BUSCAR</button>
                     </div>
                 </div>
             </div>
         
-            <div id="search-result" style="display:none;" class="fade-in">
-                
-                <div class="card border-0 shadow-sm mb-4 overflow-hidden">
-                    <div class="card-body text-center p-4">
-                        <span class="badge bg-light text-dark border mb-2 px-3 py-2 rounded-pill" id="res-folio">Folio</span>
-                        <h2 class="fw-bold mb-1" id="res-cliente">Cliente</h2>
-                        <div class="text-muted small mb-4" id="res-fecha">Fecha</div>
-        
-                        <div class="position-relative m-4">
-                            <div class="progress" style="height: 4px;">
-                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="res-bar"></div>
+            <div id="search-result" class="card mt-3 shadow-sm border-0" style="display:none;">
+    
+                <div id="res-multiple-view" style="display:none;" class="p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-muted m-0">📋 Selecciona una orden:</h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('search-result').style.display='none'">Cerrar</button>
+                    </div>
+                    <div id="res-multiple-list" class="list-group"></div>
+                </div>
+            
+                <div id="res-single-view" style="display:none;">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="m-0 fw-bold" id="res-folio">---</h5>
+                            <small id="res-cliente" class="text-white opacity-75">---</small>
+                        </div>
+                        <div id="res-saldo" class="badge bg-light text-dark">---</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress mb-2" style="height: 10px;">
+                            <div id="res-bar" class="progress-bar bg-secondary" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mb-3 text-center">
+                            <span>Lavando</span><span>Listo</span><span>Entregado</span>
+                        </div>
+                        <div id="res-status-text" class="alert alert-secondary text-center py-2 fw-bold mb-3">PENDIENTE</div>
+            
+                        <div class="row">
+                            <div class="col-md-7">
+                                <h6 class="small fw-bold text-muted">Prendas</h6>
+                                <ul class="list-group mb-3 small" id="res-items"></ul>
                             </div>
-                            <div class="d-flex justify-content-between position-absolute top-0 w-100 translate-middle-y">
-                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-basket text-success"></i></span>
-                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-water text-muted" id="icon-lav"></i></span>
-                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-check-lg text-muted" id="icon-lis"></i></span>
-                                <span class="bg-white p-1 border rounded-circle"><i class="bi bi-box-seam text-muted" id="icon-ent"></i></span>
-                            </div>
-                            <div class="d-flex justify-content-between mt-2 small fw-bold text-uppercase text-muted">
-                                <span>Recibido</span><span>Lavando</span><span>Listo</span><span>Entregado</span>
+                            <div class="col-md-5">
+                                <h6 class="small fw-bold text-muted">Pagos</h6>
+                                <div class="bg-light p-2 rounded mb-2" id="res-historial-pagos"></div>
+                                <div class="d-flex justify-content-between fw-bold border-top pt-2">
+                                    <span>Total:</span> <span id="res-total">$0.00</span>
+                                </div>
+                                <div class="d-flex justify-content-between text-success small">
+                                    <span>Pagado:</span> <span id="res-pagado">$0.00</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div id="res-status-text" class="alert alert-light fw-bold border mt-3 mb-0">ESTATUS</div>
-                    </div>
-                </div>
-        
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header bg-white fw-bold border-0"><i class="bi bi-list-check text-primary"></i> Prendas y Servicios</div>
-                            <ul class="list-group list-group-flush small" id="res-items"></ul>
+                        <div id="res-delivery-info" class="mt-3 p-2 bg-success bg-opacity-10 border border-success rounded" style="display:none;">
+                            <small class="text-success fw-bold">Entregado por: <span id="res-entregador"></span></small>
+                            <br><small class="text-muted" id="res-fecha-ent"></small>
                         </div>
-                    </div>
-        
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header bg-white fw-bold border-0"><i class="bi bi-cash-coin text-success"></i> Finanzas</div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between mb-2"><span>Total Nota:</span><span class="fw-bold" id="res-total">$0.00</span></div>
-                                <div class="d-flex justify-content-between mb-2 text-success"><span>Abonado:</span><span class="fw-bold" id="res-pagado">$0.00</span></div>
-                                <hr>
-                                <div class="d-flex justify-content-between fs-5 fw-bold">
-                                    <span>Saldo:</span>
-                                    <span id="res-saldo" class="text-danger">$0.00</span>
-                                </div>
-                                
-                                <div class="mt-3">
-                                    <small class="text-muted fw-bold">HISTORIAL DE PAGOS:</small>
-                                    <div id="res-historial-pagos" class="mt-1"></div>
-                                </div>
-                            </div>
-                            
-                            <div class="card-footer bg-light border-0" id="res-delivery-info" style="display:none;">
-                                <small class="text-muted fw-bold d-block mb-1">DETALLES DE ENTREGA</small>
-                                <div class="d-flex align-items-center gap-2 text-dark">
-                                    <i class="bi bi-truck text-primary"></i>
-                                    <div class="small lh-1">
-                                        <div>Entregado por: <b id="res-entregador">--</b></div>
-                                        <div class="text-muted" id="res-fecha-ent">--</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <div class="text-end mt-2"><small class="text-muted" id="res-fecha"></small></div>
                     </div>
                 </div>
             </div>
@@ -705,6 +690,6 @@
     </div>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

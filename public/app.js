@@ -469,87 +469,199 @@
         }); 
     };
 
-    // --- PEGAR EN public/app.js ---
-
-    // 1. FUNCIÓN PRINCIPAL DE BÚSQUEDA
-    window.buscarOrden = async function() {
-        const input = getEl('inputBusquedaFolio');
-        const folio = input.value.trim().toUpperCase();
-        const resultDiv = getEl('search-result');
-
-        if (folio.length < 3) return Swal.fire('Error', 'Escribe un folio válido (Ej. PB-001)', 'warning');
-
-        // Efecto de carga
-        Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
-
-        try {
-            const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
-            const data = await r.json();
-            
-            Swal.close();
-
-            if (!data || !data.orden) {
-                resultDiv.style.display = 'none';
-                return Swal.fire('No encontrado', 'Revisa que el folio sea correcto y pertenezca a esta sucursal.', 'error');
-            }
-
-            const o = data.orden;
-            const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
-
-            // --- LLENAR DATOS ---
-            safeText('res-folio', o.folio);
-            safeText('res-cliente', o.cliente_nombre);
-            safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
-            safeText('res-total', money(o.total));
-            safeText('res-pagado', money(o.monto_pagado));
-            
-            // Saldo
-            const elSaldo = getEl('res-saldo');
-            elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
-            elSaldo.className = saldo > 0.5 ? 'text-danger' : 'text-success';
-
-            // Items
-            getEl('res-items').innerHTML = data.items.map(i => `
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="fw-bold">${i.cantidad}x ${i.servicio}</span>
-                        ${i.notas ? `<br><small class="text-muted">${i.notas}</small>` : ''}
-                    </div>
-                    <span class="fw-bold">$${(i.cantidad * i.precio_unitario).toFixed(2)}</span>
-                </li>
-            `).join('');
-
-            // Pagos Historial
-            getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
-                <div class="d-flex justify-content-between small border-bottom py-1">
-                    <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
-                    <span class="fw-bold text-success">${money(p.monto)}</span>
+    /* =========================================================
+   BÚSQUEDA CORREGIDA (VERSIÓN DEFINITIVA)
+   ========================================================= */
+// --- PARCHE DE EMERGENCIA PARA BÚSQUEDA ---
+window.buscarOrden = async function() {
+    console.log("🚀 EJECUTANDO BÚSQUEDA NUEVA (PARCHEADA)");
+    const input = document.getElementById('inputBusquedaFolio');
+    const texto = input.value.trim(); 
+    
+    // 1. SI FALTA EL HTML, LO CREAMOS AL VUELO
+    const container = document.getElementById('search-result');
+    if (container && !document.getElementById('res-multiple-list')) {
+        console.log("🔧 Reparando HTML...");
+        container.innerHTML = `
+            <div id="res-multiple-view" style="display:none;" class="p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold text-muted m-0">📋 Selecciona:</h6>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="this.closest('#search-result').style.display='none'">X</button>
                 </div>
-            `).join('') : '<small class="text-muted">Sin pagos registrados</small>';
+                <div id="res-multiple-list" class="list-group"></div>
+            </div>
+            <div id="res-single-view" style="display:none;"></div>
+        `;
+    }
 
-            // --- LÓGICA DE LA LÍNEA DE TIEMPO (TIMELINE) ---
-            updateTimeline(o.estatus);
+    Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
 
-            // --- INFORMACIÓN DE ENTREGA ---
-            const divEnt = getEl('res-delivery-info');
+    try {
+        // Usamos la variable global sucursalID o forzamos 1
+        const sId = (typeof sucursalID !== 'undefined') ? sucursalID : 1;
+        const r = await fetch(`/api/ordenes/rastreo/${encodeURIComponent(texto)}?sucursal_id=${sId}`);
+        const data = await r.json();
+        
+        Swal.close();
+
+        if (!data.found) return Swal.fire('No encontrado', 'No hay coincidencias', 'warning');
+
+        // MODO LISTA
+        if (data.multiple) {
+            const divLista = document.getElementById('res-multiple-list');
+            divLista.innerHTML = data.resultados.map(o => `
+                <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" 
+                        onclick="alert('Has seleccionado el folio: ' + '${o.folio}')">
+                    <div>
+                        <div class="fw-bold text-primary fs-5">#${o.folio}</div>
+                        <div class="fw-bold text-dark">${o.cliente_nombre || o.cliente}</div>
+                        <small class="text-muted">${new Date(o.fecha_creacion).toLocaleDateString()}</small>
+                    </div>
+                    <span class="badge bg-primary">${o.estatus}</span>
+                </button>
+            `).join('');
+            
+            document.getElementById('search-result').style.display = 'block';
+            document.getElementById('res-multiple-view').style.display = 'block';
+            document.getElementById('res-single-view').style.display = 'none';
+        } else {
+            Swal.fire('Encontrado', `Orden Única: ${data.orden.folio}`, 'success');
+        }
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', e.message, 'error');
+    }
+};
+
+
+
+
+// 2. Función auxiliar: Carga detalle al hacer clic en la lista
+window.cargarDetalleUnico = async function(folio) {
+    Swal.fire({title: 'Cargando...', didOpen: () => Swal.showLoading()});
+    try {
+        const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
+        const data = await r.json();
+        Swal.close();
+        
+        if(data.found) {
+            getEl('res-multiple-view').style.display = 'none'; // Ocultamos lista
+            window.renderizarDetalleOrden(data); // Mostramos detalle
+        }
+    } catch(e) { Swal.close(); }
+};
+
+// 3. Función auxiliar: Pinta la tarjeta de detalle
+window.renderizarDetalleOrden = function(data) {
+    const o = data.orden;
+    const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
+
+    getEl('res-single-view').style.display = 'block';
+    
+    // Textos básicos
+    safeText('res-folio', o.folio);
+    safeText('res-cliente', o.cliente_nombre || o.cliente);
+    safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
+    safeText('res-total', money(o.total));
+    safeText('res-pagado', money(o.monto_pagado));
+    
+    // Etiqueta de saldo
+    const elSaldo = getEl('res-saldo');
+    if(elSaldo) {
+        elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
+        elSaldo.className = saldo > 0.5 ? 'badge bg-danger' : 'badge bg-success';
+    }
+
+    // Lista de prendas
+    getEl('res-items').innerHTML = data.items.map(i => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div><span class="fw-bold">${i.cantidad}x ${i.servicio}</span><br><small class="text-muted">${i.notas || ''}</small></div>
+            <span class="fw-bold">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</span>
+        </li>`).join('');
+
+    // Historial de pagos
+    getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
+        <div class="d-flex justify-content-between small border-bottom py-1">
+            <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
+            <span class="fw-bold text-success">${money(p.monto)}</span>
+        </div>`).join('') : '<small class="text-muted">Sin pagos registrados</small>';
+
+    // Línea de tiempo
+    if(typeof updateTimeline === 'function') updateTimeline(o.estatus);
+
+    // Info entrega
+    const divEnt = getEl('res-delivery-info');
+    if(divEnt) {
+        if (o.estatus === 'entregado') {
+            divEnt.style.display = 'block';
+            safeText('res-entregador', data.delivery_info.entregado_por || 'Staff');
+            if(o.fecha_real_entrega) safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
+        } else { divEnt.style.display = 'none'; }
+    }
+
+    getEl('search-result').style.display = 'block';
+};
+
+// AUXILIAR: Carga el detalle cuando haces clic en la lista de múltiples
+window.cargarDetalleUnico = async function(folio) {
+    Swal.fire({title: 'Cargando...', didOpen: () => Swal.showLoading()});
+    try {
+        // Reutilizamos la búsqueda, como el folio es exacto, el backend devolverá "multiple: false"
+        const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
+        const data = await r.json();
+        Swal.close();
+        
+        if(data.found && !data.multiple) {
+            getEl('res-multiple-view').style.display = 'none'; // Ocultar lista
+            window.renderizarDetalleOrden(data); // Mostrar detalle
+        }
+    } catch(e) { Swal.close(); }
+};
+
+    // AUXILIAR: Pinta la tarjeta de detalle (Lo que ya tenías)
+    window.renderizarDetalleOrden = function(data) {
+        const o = data.orden;
+        const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
+
+        getEl('res-single-view').style.display = 'block'; // Mostrar contenedor único
+        
+        safeText('res-folio', o.folio);
+        safeText('res-cliente', o.cliente_nombre || o.cliente);
+        safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
+        safeText('res-total', money(o.total));
+        safeText('res-pagado', money(o.monto_pagado));
+        
+        const elSaldo = getEl('res-saldo');
+        if(elSaldo) {
+            elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
+            elSaldo.className = saldo > 0.5 ? 'text-danger fw-bold' : 'text-success fw-bold';
+        }
+
+        getEl('res-items').innerHTML = data.items.map(i => `
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div><span class="fw-bold">${i.cantidad}x ${i.servicio}</span><br><small class="text-muted">${i.notas || ''}</small></div>
+                <span class="fw-bold">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</span>
+            </li>`).join('');
+
+        getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
+            <div class="d-flex justify-content-between small border-bottom py-1">
+                <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
+                <span class="fw-bold text-success">${money(p.monto)}</span>
+            </div>`).join('') : '<small class="text-muted">Sin pagos registrados</small>';
+
+        if(typeof updateTimeline === 'function') updateTimeline(o.estatus);
+
+        const divEnt = getEl('res-delivery-info');
+        if(divEnt) {
             if (o.estatus === 'entregado') {
                 divEnt.style.display = 'block';
                 safeText('res-entregador', data.delivery_info.entregado_por || 'Staff');
-                if(o.fecha_real_entrega) {
-                    safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
-                }
-            } else {
-                divEnt.style.display = 'none';
-            }
-
-            // Mostrar todo
-            resultDiv.style.display = 'block';
-            input.value = ''; // Limpiar campo
-
-        } catch (e) {
-            console.error(e);
-            Swal.fire('Error', 'Fallo al buscar la orden', 'error');
+                if(o.fecha_real_entrega) safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
+            } else { divEnt.style.display = 'none'; }
         }
+
+        getEl('search-result').style.display = 'block';
     };
 
     // 2. HELPER PARA LA BARRA DE PROGRESO
@@ -646,7 +758,6 @@
         }
     };
 
-    // 3. CERRAR CAJA (CORTE CIEGO)
     // 3. CERRAR CAJA (CORTE 100% CIEGO - SIN MOSTRAR RESULTADOS AL EMPLEADO)
     window.cerrarTurnoUI = async function() {
         // Paso 1: Advertencia
@@ -922,45 +1033,38 @@
    /* =========================================
       6. KANBAN Y ORDENES
       ========================================= */
-    window.loadKanban = async function() { 
+      window.loadKanban = async function() { 
         ['k-pend','k-lav','k-list'].forEach(id=>getEl(id).innerHTML=''); 
         const r = await fetch(`/api/ordenes/listado?sucursal_id=${sucursalID}`); 
         const ord = await r.json(); 
         
         ord.forEach(o => { 
-            let c='', b='', estiloCard='border-left: 4px solid var(--accent) !important;', iconoAlerta=''; 
+            let c='', b=''; 
             
-            // --- FORMATEAR FECHA Y HORA DE ENTREGA ---
-            let textoEntrega = '';
-            if(o.fecha_entrega) {
-                const fDB = new Date(o.fecha_entrega);
-                fDB.setHours(fDB.getHours() + 12);
-                const fechaStr = fDB.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'});
-                textoEntrega = `📅 ${fechaStr} ${o.horario_entrega ? '('+o.horario_entrega+')' : ''}`;
-            }
-            // -----------------------------------------
-
-            let btnWA = o.telefono ? `<a href="https://wa.me/52${o.telefono.replace(/\D/g,'')}" target="_blank" class="btn btn-sm btn-success text-white ms-1" onclick="event.stopPropagation()"><i class="bi bi-whatsapp"></i></a>` : '';
-            let diasAnt = o.fecha_creacion ? Math.floor(Math.abs(new Date() - new Date(o.fecha_creacion)) / 86400000) : 0; 
-            
-            if(o.estatus==='pendiente') { c='k-pend'; b=`<div class="d-flex"><button class="btn btn-sm btn-info w-100 text-white fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'lavando')">Lavando ➡️</button>${btnWA}</div>`; } 
-            else if(o.estatus==='lavando') { c='k-lav'; b=`<div class="d-flex"><button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" onclick="window.cambiarEstatus(${o.id}, 'listo')">Listo ✅</button>${btnWA}</div>`; } 
-            else if(o.estatus==='listo') { c='k-list'; b=`<div class="d-flex"><button class="btn btn-sm btn-dark w-100 fw-bold shadow-sm" onclick="window.entregar(${o.id})">Entregar 👋</button>${btnWA}</div>`; if(diasAnt >= DIAS_ABANDONO) { estiloCard='border-left: 4px solid #6f42c1 !important; background-color: #f3e5f5;'; iconoAlerta=`<div class="badge bg-purple text-white mb-1" style="background:#6f42c1">🕸️ OLVIDADO (${diasAnt} DÍAS)</div>`; } } 
+            // BOTONES DE ESTATUS
+            if(o.estatus==='pendiente') { 
+                c='k-pend'; 
+                b=`<button class="btn btn-sm btn-info w-100 text-white fw-bold" onclick="window.cambiarEstatus(${o.id}, 'lavando')">Lavando ➡️</button>`; 
+            } 
+            else if(o.estatus==='lavando') { 
+                c='k-lav'; 
+                b=`<button class="btn btn-sm btn-success w-100 fw-bold" onclick="window.cambiarEstatus(${o.id}, 'listo')">Listo ✅</button>`; 
+            } 
+            else if(o.estatus==='listo') { 
+                c='k-list'; 
+                // --- CAMBIO AQUÍ: Pasamos el SALDO a la función entregar ---
+                b=`<button class="btn btn-sm btn-dark w-100 fw-bold" onclick="window.entregar(${o.id}, ${o.saldo})">Entregar 👋</button>`; 
+            } 
             
             if(c) getEl(c).innerHTML += `
-            <div class="card p-3 mb-2 shadow-sm border-0 rounded-3" style="cursor:pointer; ${estiloCard}" onclick="window.verDetalles(${o.id},'${o.folio}')">
-                ${iconoAlerta}
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="badge bg-light text-dark border">${o.folio}</span>
-                    ${o.saldo>0?`<span class="badge bg-danger">DEBE ${money(o.saldo)}</span>`:'<span class="badge bg-success">PAGADO</span>'}
-                </div>
-                <div class="fw-bold text-truncate">${o.cliente}</div>
-                
-                <div class="small text-primary fw-bold my-1">${textoEntrega}</div>
-                
-                <div class="small text-muted mb-2">${money(o.total)}</div>
-                <div class="mt-2" onclick="event.stopPropagation()">${b}</div>
-            </div>`; 
+                <div class="card p-3 mb-2 shadow-sm border-0" onclick="window.verDetalles(${o.id},'${o.folio}')">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="badge bg-light text-dark border">${o.folio}</span>
+                        ${o.saldo>0.5 ? `<span class="badge bg-danger">DEBE ${money(o.saldo)}</span>` : '<span class="badge bg-success">PAGADO</span>'}
+                    </div>
+                    <div class="fw-bold text-truncate">${o.cliente}</div>
+                    <div class="mt-2" onclick="event.stopPropagation()">${b}</div>
+                </div>`; 
         }); 
     };
    
@@ -978,9 +1082,31 @@
        } catch(e) { console.error(e); }
    };
    
-   window.entregar = async function(id) { 
-       if(await confirmAction('¿Confirmar entrega?')) { window.cambiarEstatus(id, 'entregado'); } 
-   };
+    window.entregar = async function(id, saldo) { 
+        // 1. REGLA DE ORO: SI DEBE, NO SALE
+        if (parseFloat(saldo) > 0.5) {
+            Swal.fire({
+                icon: 'error',
+                title: '¡Tiene Adeudo!',
+                html: `Esta orden tiene un saldo pendiente de <b class="text-danger">$${parseFloat(saldo).toFixed(2)}</b>.<br>Debes cobrarla antes de entregar.`,
+                confirmButtonText: '💸 Ir a Cobrar',
+                confirmButtonColor: '#198754', // Verde
+                showCancelButton: true,
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Abrimos directamente la ventana de cobro
+                    window.abrirLiquidacion(id, parseFloat(saldo));
+                }
+            });
+            return; // DETENEMOS LA FUNCIÓN AQUÍ
+        }
+
+        // 2. Si no debe nada, procedemos normal
+        if(await confirmAction('¿Confirmar entrega de prendas?')) {
+            window.cambiarEstatus(id, 'entregado'); 
+        }
+    };
    
    window.verDetalles = async function(id, f) {
        const r = await fetch(`/api/ordenes/${id}/detalles`); const i = await r.json();
@@ -1055,7 +1181,56 @@ window.abrirLiquidacion = function(id, saldo) {
         }
     };
 
-    window.confirmarLiquidacion = async function(metodo) { if (!ordenPorLiquidar) return; await fetch('/api/ordenes/liquidar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orden_id: ordenPorLiquidar.id, monto: ordenPorLiquidar.saldo, metodo_pago: metodo, usuario_id: usuario.id, sucursal_id: sucursalID }) }); bootstrap.Modal.getInstance(getEl('modalLiquidar')).hide(); bootstrap.Modal.getInstance(getEl('modalDetalles')).hide(); Swal.fire('Pagado', '', 'success'); window.loadKanban(); };
+        // --- FUNCIÓN DE LIQUIDACIÓN BLINDADA (SIN ERRORES DE MODAL) ---
+    window.confirmarLiquidacion = async function(metodo) { 
+        if (!ordenPorLiquidar) return; 
+        
+        try {
+            // 1. REGISTRAR PAGO EN BASE DE DATOS
+            await fetch('/api/ordenes/liquidar', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    orden_id: ordenPorLiquidar.id, 
+                    monto: ordenPorLiquidar.saldo, 
+                    metodo_pago: metodo, 
+                    usuario_id: usuario.id, 
+                    sucursal_id: sucursalID 
+                }) 
+            }); 
+            
+            // 2. CERRAR MODALES DE FORMA SEGURA (Aquí estaba el error)
+            // Usamos un bloque try-catch interno o validamos existencia para que no rompa el flujo
+            const elLiq = document.getElementById('modalLiquidar');
+            const elDet = document.getElementById('modalDetalles');
+
+            if (elLiq) {
+                const modalLiq = bootstrap.Modal.getInstance(elLiq);
+                if (modalLiq) modalLiq.hide();
+            }
+
+            if (elDet) {
+                const modalDet = bootstrap.Modal.getInstance(elDet);
+                if (modalDet) modalDet.hide();
+            }
+            
+            // 3. CONFIRMACIÓN Y RECARGA
+            Swal.fire('Pagado', 'Deuda liquidada correctamente', 'success'); 
+            window.loadKanban(); 
+            
+            // Si estábamos en la pantalla de búsqueda, intentamos actualizar el detalle
+            const divSearch = document.getElementById('search-result');
+            if(divSearch && divSearch.style.display === 'block') {
+                // Si hay un folio visible, recargamos su detalle
+                const folioVisible = document.getElementById('res-folio')?.innerText;
+                if(folioVisible && folioVisible !== '---') window.cargarDetalleUnico(folioVisible);
+            }
+
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Hubo un problema al registrar el pago', 'error');
+        }
+    };
     // --- CAMBIAR EN public/app.js ---
     // --- PEGAR EN public/app.js ---
 
@@ -1859,71 +2034,62 @@ window.abrirLiquidacion = function(id, saldo) {
     window.buscarOrden = async function() {
         const input = getEl('inputBusquedaFolio');
         if(!input) return;
-        const folio = input.value.trim().toUpperCase();
+        const texto = input.value.trim(); 
         const resultDiv = getEl('search-result');
-
-        if (folio.length < 3) return Swal.fire('Error', 'Escribe un folio válido (Ej. PB-001)', 'warning');
-
-        Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
-
-        try {
-            const r = await fetch(`/api/ordenes/rastreo/${folio}?sucursal_id=${sucursalID}`);
-            if (!r.ok) throw new Error("No encontrado");
-            const data = await r.json();
-            
-            Swal.close();
-
-            if (!data || !data.orden) {
-                resultDiv.style.display = 'none';
-                return Swal.fire('No encontrado', 'Datos vacíos.', 'error');
-            }
-
-            const o = data.orden;
-            const saldo = parseFloat(o.total) - parseFloat(o.monto_pagado);
-
-            // Llenar datos
-            safeText('res-folio', o.folio);
-            safeText('res-cliente', o.cliente_nombre);
-            safeText('res-fecha', `Recibido: ${new Date(o.fecha_creacion).toLocaleString()}`);
-            safeText('res-total', money(o.total));
-            safeText('res-pagado', money(o.monto_pagado));
-            
-            const elSaldo = getEl('res-saldo');
-            if(elSaldo) {
-                elSaldo.innerText = saldo > 0.5 ? `PENDIENTE: ${money(saldo)}` : 'LIQUIDADO';
-                elSaldo.className = saldo > 0.5 ? 'text-danger' : 'text-success';
-            }
-
-            getEl('res-items').innerHTML = data.items.map(i => `
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div><span class="fw-bold">${i.cantidad}x ${i.servicio}</span>${i.notas ? `<br><small class="text-muted">${i.notas}</small>` : ''}</div>
-                    <span class="fw-bold">$${(i.cantidad * parseFloat(i.precio_unitario)).toFixed(2)}</span>
-                </li>`).join('');
-
-            getEl('res-historial-pagos').innerHTML = data.pagos.length ? data.pagos.map(p => `
-                <div class="d-flex justify-content-between small border-bottom py-1">
-                    <span class="text-muted">${new Date(p.fecha).toLocaleDateString()} (${p.metodo_pago})</span>
-                    <span class="fw-bold text-success">${money(p.monto)}</span>
-                </div>`).join('') : '<small class="text-muted">Sin pagos registrados</small>';
-
-            updateTimeline(o.estatus);
-
-            const divEnt = getEl('res-delivery-info');
-            if(divEnt) {
-                if (o.estatus === 'entregado') {
-                    divEnt.style.display = 'block';
-                    safeText('res-entregador', data.delivery_info.entregado_por || 'Staff');
-                    if(o.fecha_real_entrega) safeText('res-fecha-ent', new Date(o.fecha_real_entrega).toLocaleString());
-                } else { divEnt.style.display = 'none'; }
-            }
-
-            resultDiv.style.display = 'block';
-            input.value = ''; 
-
-        } catch (e) {
-            console.error(e);
-            Swal.fire('Error', 'No se encontró la orden o hubo un error.', 'error');
+        const divLista = getEl('res-multiple-list');
+        const divDetalle = getEl('res-single-view');
+        const divVistaLista = getEl('res-multiple-view');
+    
+        // AUTO-REPARACIÓN HTML
+        if (resultDiv && !divLista) {
+            console.warn("Reparando HTML de búsqueda...");
+            resultDiv.innerHTML = `
+                <div id="res-multiple-view" style="display:none;" class="p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="fw-bold text-muted m-0">📋 Selecciona:</h6><button class="btn btn-sm btn-outline-secondary" onclick="this.closest('#search-result').style.display='none'">X</button></div>
+                    <div id="res-multiple-list" class="list-group"></div>
+                </div>
+                <div id="res-single-view" style="display:none;">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between"><h5 id="res-folio" class="m-0">---</h5><div id="res-saldo" class="badge bg-light text-dark">---</div></div>
+                    <div class="card-body">
+                        <h5 id="res-cliente" class="card-title text-primary fw-bold">---</h5>
+                        <div class="progress mb-2" style="height: 10px;"><div id="res-bar" class="progress-bar bg-secondary" style="width: 0%"></div></div>
+                        <div id="res-status-text" class="alert alert-secondary text-center fw-bold">---</div>
+                        <ul class="list-group mb-2" id="res-items"></ul>
+                        <div id="res-historial-pagos" class="bg-light p-2 small"></div>
+                        <div class="d-flex justify-content-between fw-bold mt-2"><span>TOTAL:</span><span id="res-total">$0.00</span></div>
+                        <div class="d-flex justify-content-between text-success small"><span>PAGADO:</span><span id="res-pagado">$0.00</span></div>
+                        <div id="res-delivery-info" style="display:none" class="mt-2 alert alert-success p-1 small"></div>
+                    </div>
+                </div>`;
         }
+    
+        if (texto.length < 3) return Swal.fire('Escribe más', 'Mínimo 3 letras', 'info');
+        Swal.fire({title: 'Buscando...', didOpen: () => Swal.showLoading()});
+    
+        try {
+            const r = await fetch(`/api/ordenes/rastreo/${encodeURIComponent(texto)}?sucursal_id=${sucursalID}`);
+            const data = await r.json();
+            Swal.close();
+    
+            // Limpieza visual
+            resultDiv.style.display = 'none';
+            if(divVistaLista) divVistaLista.style.display = 'none';
+            if(divDetalle) divDetalle.style.display = 'none';
+    
+            if (!data.found) return Swal.fire('No encontrado', 'No hay coincidencias.', 'warning');
+    
+            if (data.multiple) {
+                getEl('res-multiple-list').innerHTML = data.resultados.map(o => `
+                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" onclick="window.cargarDetalleUnico('${o.folio}')">
+                        <div><div class="fw-bold text-primary fs-5">#${o.folio}</div><div class="fw-bold text-dark">${o.cliente_nombre||o.cliente}</div><small class="text-muted">${new Date(o.fecha_creacion).toLocaleDateString()}</small></div>
+                        <span class="badge ${o.estatus==='entregado'?'bg-secondary':'bg-success'}">${o.estatus}</span>
+                    </button>`).join('');
+                getEl('res-multiple-view').style.display = 'block';
+                resultDiv.style.display = 'block';
+            } else {
+                window.renderizarDetalleOrden(data);
+            }
+        } catch (e) { console.error(e); Swal.fire('Error', 'Fallo de búsqueda', 'error'); }
     };
 
     window.updateTimeline = function(estatus) {

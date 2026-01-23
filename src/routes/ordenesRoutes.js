@@ -236,52 +236,81 @@ router.get('/reporte-completo', async (req, res) => {
 router.get('/listado', async (req, res) => { try { const r = await pool.query(`SELECT o.*, c.nombre as cliente, c.telefono, c.direccion_principal, (o.total - o.monto_pagado) as saldo FROM ordenes o JOIN clientes c ON o.cliente_id = c.id WHERE o.sucursal_id = $1 ORDER BY o.id DESC LIMIT 150`, [req.query.sucursal_id]); res.json(r.rows); } catch (e) { res.status(500).json({ error: e.message }); } });
 
 // =========================================================
-// 5. BÚSQUEDA Y DETALLES
+// RASTREO CON CHISMOSOS 🕵️‍♂️
 // =========================================================
-
-// --- RASTREO 360 (AQUÍ ESTÁ LA RUTA QUE FALTABA) ---
-router.get('/rastreo/:folio', async (req, res) => {
+router.get('/rastreo/:busqueda', async (req, res) => {
     try {
-        const { folio } = req.params;
+        const { busqueda } = req.params;
         const { sucursal_id } = req.query;
+        const termino = `%${busqueda}%`;
 
-        // 1. INFO PRINCIPAL
-        const ordenQ = await pool.query(`
-            SELECT o.*, c.nombre as cliente_nombre, c.telefono, c.direccion_principal 
-            FROM ordenes o 
-            JOIN clientes c ON o.cliente_id = c.id 
-            WHERE o.folio = $1 AND o.sucursal_id = $2
-        `, [folio, sucursal_id]);
+        console.log("--------------------------------------------------");
+        console.log("👀 CHISMOSO BACKEND: Iniciando búsqueda...");
+        console.log(`🔎 Término: "${busqueda}"`);
+        console.log(`🏢 Sucursal ID: ${sucursal_id}`);
 
-        if (ordenQ.rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
-        const orden = ordenQ.rows[0];
+        // SQL
+        const sql = `
+            SELECT o.*, c.nombre AS cliente_nombre 
+            FROM ordenes o
+            LEFT JOIN clientes c ON o.cliente_id = c.id
+            WHERE o.sucursal_id = $1 
+            AND (
+                CAST(o.folio AS TEXT) ILIKE $2 
+                OR 
+                c.nombre ILIKE $2
+            )
+            ORDER BY o.id DESC LIMIT 50`;
+        
+        console.log("⚙️ Ejecutando SQL...");
+        const matches = await pool.query(sql, [sucursal_id, termino]);
 
-        // 2. ITEMS
-        const itemsQ = await pool.query("SELECT * FROM detalle_orden WHERE orden_id = $1", [orden.id]);
+        console.log(`✅ Resultados encontrados: ${matches.rows.length}`);
 
-        // 3. PAGOS
-        const pagosQ = await pool.query("SELECT * FROM pagos WHERE orden_id = $1 ORDER BY fecha DESC", [orden.id]);
+        // CASO A: NO HAY RESULTADOS
+        if (matches.rows.length === 0) {
+            console.log("⚠️ No se encontró nada. Respondiendo { found: false }");
+            return res.json({ found: false });
+        }
 
-        // 4. ¿QUIÉN ENTREGÓ?
-        let entregadoPor = 'No especificado';
+        // CASO B: LISTA (Múltiples)
+        if (matches.rows.length > 1) {
+            console.log("📋 Se encontraron varios. Enviando lista...");
+            return res.json({ 
+                found: true, 
+                multiple: true, 
+                resultados: matches.rows 
+            });
+        }
+
+        // CASO C: DETALLE (Uno solo)
+        console.log("🎯 Se encontró uno exacto. Buscando detalles...");
+        const orden = matches.rows[0];
+        
+        // Chismoso extra para verificar si trae el nombre
+        console.log(`👤 Cliente detectado: ${orden.cliente_nombre}`);
+
+        const itemsQ = await pool.query("SELECT * FROM detalles_orden WHERE orden_id = $1", [orden.id]);
+        const pagosQ = await pool.query("SELECT * FROM pagos WHERE orden_id = $1 ORDER BY id DESC", [orden.id]);
+
+        let deliveryInfo = {};
         if (orden.estatus === 'entregado') {
-            const logQ = await pool.query(`
-                SELECT u.nombre 
-                FROM logs_auditoria l
-                JOIN usuarios u ON l.usuario_id = u.id
-                WHERE l.detalles ILIKE $1 AND l.accion = 'CAMBIO_ESTATUS' AND l.detalles ILIKE '%entregado%'
-                ORDER BY l.id DESC LIMIT 1
-            `, [`%${folio}%`]);
-            if (logQ.rows.length > 0) entregadoPor = logQ.rows[0].nombre;
+            deliveryInfo = { entregado_por: 'Staff', fecha: orden.fecha_entrega_real };
         }
 
         res.json({
-            orden,
+            found: true,
+            multiple: false,
+            orden: orden,
             items: itemsQ.rows,
             pagos: pagosQ.rows,
-            delivery_info: { entregado_por: entregadoPor }
+            delivery_info: deliveryInfo
         });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+    } catch (e) {
+        console.error("❌ ERROR CRÍTICO EN SQL:", e.message); 
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/:id/detalles', async (req, res) => { try { const r = await pool.query('SELECT * FROM detalle_orden WHERE orden_id = $1', [req.params.id]); res.json(r.rows); } catch (e) { res.status(500).json({ error: e.message }); } });
